@@ -4,26 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>burg</title>
+
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML"></script>
 </head>
 <body>
     <a href="../index.html">back</a>
     <hr>
-    <h3>orgianl sound</h3>
+    <h1 style="text-align: center;">实时LPC声码器，我是说无延时和分块处理</h1>
+    <h3>如何工作</h3>
+    基于<a href="https://baike.baidu.com/item/%E4%BC%AF%E6%A0%BC%E7%AE%97%E6%B3%95/16598340">burg算法</a>，但将其中的晶格滤波器参数计算修改为泄露加法<br>
+    <hr>
+    <h3>原始声音</h3>
+    <h3></h3>
     <audio controls>
         <source src="o.wav" type="audio/wav">
     </audio>
-    <h3>recusial</h3>
+    <h3>残差</h3>
     <audio controls>
         <source src="hello_resc.wav" type="audio/wav">
     </audio>
-    <h3>lpc vocoder with sawtooth</h3>
+    <h3>与锯齿波</h3>
     <audio controls>
         <source src="hello_iir.wav" type="audio/wav">
     </audio>
     <hr>
-    <h3>code</h3>
-    <a href="burg.py" download>download code</a>
-    <h3>warning</h3>
-    <b>loud sample</b> after processing! you have to use tools like audacity to <b>normalize</b> audio files!
+    <h3>代码</h3>
+    <a href="burg.py">下载代码</a>
+    <h3>警告</h3>
+    处理之后<b>音量很大</b>! 你需要音频工具来<b>标准化</b>音频文件!
 </body>
 </html>
