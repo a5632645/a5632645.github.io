@@ -6,7 +6,9 @@ import scipy.signal
 from scipy.io import wavfile
 _, x = wavfile.read('C:/Users/Kawai/Desktop/io/burg/o.wav')
 x = scipy.signal.lfilter([1, -0.7], [1], x)
-p = 30
+x = scipy.signal.lfilter([1, -0.7], [1], x)
+x = scipy.signal.lfilter([1, -0.7], [1], x)
+p = 50
 lattice_k = np.zeros(p)
 eb_latch = np.zeros(p)
 eb_out = np.zeros(p + 1)
@@ -40,8 +42,8 @@ for i in range(len(x)):
         down = ef_out[j] * ef_out[j] + ef_out_latch[j] * ef_out_latch[j]
         if down == 0.0:
             down = 1.0
-        efsum[j] = 0.999 * efsum[j] + up
-        ebsum[j] = 0.999 * ebsum[j] + down
+        efsum[j] = 0.99 * efsum[j] + up
+        ebsum[j] = 0.99 * ebsum[j] + down
         lattice_k[j] = -2 * efsum[j] / ebsum[j]
         if abs(lattice_k[j] > 1.0):
             raise RuntimeError('error unstable filter')
