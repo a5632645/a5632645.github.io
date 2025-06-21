@@ -6,7 +6,7 @@ import scipy.signal
 from scipy.io import wavfile
 _, x = wavfile.read('C:/Users/Kawai/Desktop/io/burg/o.wav')
 x = scipy.signal.lfilter([1, -0.7, 0.3], [1, -1.4, 0.49], x)
-p = 15
+p = 10
 lattice_k = np.zeros(p)
 eb_latch = np.zeros(p)
 eb_out = np.zeros(p + 1)
@@ -38,8 +38,8 @@ for i in range(len(x)):
     for j in range(p):
         up = ef_out[j] * ef_out_latch[j]
         down = ef_out[j] * ef_out[j] + ef_out_latch[j] * ef_out_latch[j]
-        efsum[j] = 0.99 * efsum[j] + up
-        ebsum[j] = 0.99 * ebsum[j] + down
+        efsum[j] = 0.999 * efsum[j] + up
+        ebsum[j] = 0.999 * ebsum[j] + down
         if ebsum[j] == 0.0:
             ebsum[j] = 1.0
         lattice_k[j] = -2 * efsum[j] / ebsum[j]
@@ -61,5 +61,5 @@ for i in range(len(x)):
     iir_out[i] = x_iir[-1]
 
 print(lattice_k)
-wavfile.write('C:/Users/Kawai/Desktop/io/burg/hello_resc.wav', rate=48000, data=resc)
-wavfile.write('C:/Users/Kawai/Desktop/io/burg/hello_iir.wav', rate=48000, data=iir_out)
+wavfile.write('C:/Users/Kawai/Desktop/io/burg/hello_resc2.wav', rate=48000, data=resc)
+wavfile.write('C:/Users/Kawai/Desktop/io/burg/hello_iir2.wav', rate=48000, data=iir_out)
