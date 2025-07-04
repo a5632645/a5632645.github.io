@@ -1,3 +1,7 @@
 body{
     background-color: blanchedalmond;
 }
+
+.no_warp{
+    display: inline-block;
+}
