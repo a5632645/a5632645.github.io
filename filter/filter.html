@@ -3,22 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>滤波器</title>
+    <title>DSP</title>
 
     <link rel="stylesheet" href="../main.css">
 </head>
 <body>
     <a href="../index.html">back</a>
     <hr>
+
     <h3>Q15定点滤波器</h3>
-    <a href="./q15_biquad.h">q15_biquad.h</a>
-    <a href="./q15_biquad.c">q15_biquad.c</a><br>
+    <button class="hideable-btn" id="filter-q15"></button>
+    <div class="invisable" id="filter-q15-div">
+        <a href="./q15_biquad.h">q15_biquad.h</a>
+        <a href="./q15_biquad.c">q15_biquad.c</a><br>
+    </div>
+
     <h3 class="no_warp">梯度积分SVF</h3>
     <a href="https://cytomic.com/files/dsp/SkfLinearTrapOptimised2.pdf">reference</a><br>
-    <a href="./svf.c">svf.c</a>
+    <button class="hideable-btn" id="svf"></button>
+    <div class="invisable" id="svf-div">
+        <a href="./svf.c">svf.c</a>
+    </div>
+
+    <h3>三次插值</h3>
+    <button class="hideable-btn" id="thrid"></button>
+    <div class="invisable" id="thrid-div">
+        <pre class="frame">
+        float a = -p0 / 2.0f + 3.0f * p1 / 2.0f - 3.0f * p2 / 2.0f + p3 / 2.0f;
+        float b = p0 - 5.0f * p1 / 2.0f + 2.0f * p2 - p3 / 2.0f;
+        float c = -p0 / 2.0f + p2 / 2.0f;
+        float d = p1;
+        float v = a * t * t * t + b * t * t + c * t + d;
+        </pre>
+    </div>
+
+    <h3>极好的正交振荡器</h3>
+    <button class="hideable-btn" id="quad"></button>
+    <div class="invisable" id="quad-div">
+        set
+        <pre class="frame">
+        auto theta = freq / sampleRate_ * std::numbers::pi_v<float> * 2.0f;
+        k1_ = std::tan(theta / 2.0f);
+        k2_ = 2 * k1_ / (1 + k1_ * k1_);
+        </pre>
+        tick
+        <pre class="frame">
+        auto w = quadOscU_ - k1_ * quadOscV_;
+        quadOscV_ = quadOscV_ + k2_ * w;
+        quadOscU_ = w - k1_ * quadOscV_;
+        </pre>
+    </div>
+
+    <h3>CombAllpass</h3>
+    <button class="hideable-btn" id="comballpass"></button>
+    <div class="invisable" id="comballpass-div">
+
+        <pre class="frame">
+        class CombAllpass {
+        public:
+            void  Init(float sampleRate);
+            float Process(float in);
+            void  ClearInternal();
+            void  SetDelay(float delay);
+            float GetDelay() const { return delay_.GetDelay(); }
+            void  SetAlpha(float a);
+            float GetAlpha() const { return alpha_; }
+            float GetLast() const { return last_; }
+        private:
+            DelayLine delay_;
+            float alpha_{};
+            float last_{};
+        };
+    
+        class Allpass {
+        public:
+            float Process(float in) {
+                auto v = latch_;
+                auto t = in - alpha_ * v;
+                latch_ = t;
+                return v + alpha_ * t;
+            }
+            void  ClearInternal() {
+                latch_ = 0;
+            }
+            void  SetAlpha(float a) {
+                alpha_ = a;
+            }
+        private:
+            float alpha_{};
+            float latch_{};
+        };
+        </pre>
+        <pre class="frame">
+        void CombAllpass::Init(float sampleRate) {
+            delay_.Init(sampleRate);
+        }
+    
+        float CombAllpass::Process(float in) {
+            auto v = delay_.GetLast();
+            auto t = in - alpha_ * v;
+            delay_.Push(t);
+            last_ = v + alpha_ * t;
+            return last_;
+        }
+    
+        void CombAllpass::ClearInternal() {
+            delay_.ClearInternal();
+        }
+    
+        void CombAllpass::SetDelay(float delay) {
+            delay_.SetDelay(delay);
+        }
+    
+        void CombAllpass::SetAlpha(float a) {
+            alpha_ = a;
+        }
+        </pre>
+    </div>
+
     <hr>
     <h3>网页</h3>
     <a href="https://cytomic.com/technical-papers/">https://cytomic.com/technical-papers/</a>
+
+    <script src="../main.js"></script>
     <hr>
     write in 2025-7-4, update in 2025-7-4
 </body>

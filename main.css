@@ -5,3 +5,18 @@ body{
 .no_warp{
     display: inline-block;
 }
+
+.frame{
+    border-color: black;
+    border-style: solid;
+    border-width: 1px;
+    border-radius: 1px;
+}
+
+.invisable{
+    display: none;
+}
+
+.hideable-btn{
+    display: block;
+}
