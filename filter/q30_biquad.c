@@ -3,32 +3,37 @@
 #include <string.h>
 
 static void Q15Process(const struct Q15Coeff* coeff, struct Q15State* state, int16_t* x, size_t len) {
-    int16_t xlatch1 = state->xlatch1;
-    int16_t xlatch2 = state->xlatch2;
-    int16_t ylatch1 = state->ylatch1;
-    int16_t ylatch2 = state->ylatch2;
-    int32_t quantization = state->quantization;
+    quan_t xlatch1 = state->xlatch1;
+    quan_t xlatch2 = state->xlatch2;
+    quan_t ylatch1 = state->ylatch1;
+    quan_t ylatch2 = state->ylatch2;
+    acc_t acc = state->quantization;
 
     for (size_t i = 0; i < len; ++i) {
-        int16_t qx = x[i];
+        quan_t qx = x[i] << 16;
         // 如果要确保正确性，则改成int64_t
         // 性能则使用int32_t
-        typedef int32_t acc_t;
-        acc_t sum = quantization
+        acc += ((acc_t)coeff->b0 * (acc_t)qx);
+        acc += ((acc_t)coeff->b1 * (acc_t)xlatch1);
+        acc += ((acc_t)coeff->b2 * (acc_t)xlatch2);
+        acc -= ((acc_t)coeff->a1 * (acc_t)ylatch1);
+        acc -= ((acc_t)coeff->a2 * (acc_t)ylatch2);
+        /*acc_t sum = quantization
             + (acc_t)(coeff->b0 * qx) + (acc_t)(coeff->b1 * xlatch1) + (acc_t)(coeff->b2 * xlatch2)
-            - (acc_t)(coeff->a1 * ylatch1) - (acc_t)(coeff->a2 * ylatch2);
-        quantization = sum & coeff->mask;
+            - (acc_t)(coeff->a1 * ylatch1) - (acc_t)(coeff->a2 * ylatch2);*/
+        //quantization = sum & coeff->mask;
 
         // 可改为处理器的饱和指令
-        sum >>= coeff->shift;
-        if (sum > 32767) sum = 32767;
-        else if (sum < -32768) sum = -32768;
+        acc_t res = acc >> coeff->shift;
+        acc &= coeff->mask;
+        if (res > 2147483647) res = 2147483647;
+        else if (res < -2147483648ll) res = -2147483648ll;
 
-        int16_t yout = (int16_t)sum;
         xlatch2 = xlatch1;
         xlatch1 = qx;
         ylatch2 = ylatch1;
-        ylatch1 = yout;
+        ylatch1 = res;
+        int16_t yout = (int16_t)(res >> 16);
         x[i] = yout;
     }
 
@@ -36,7 +41,7 @@ static void Q15Process(const struct Q15Coeff* coeff, struct Q15State* state, int
     state->xlatch2 = xlatch2;
     state->ylatch1 = ylatch1;
     state->ylatch2 = ylatch2;
-    state->quantization = quantization;
+    state->quantization = acc;
 }
 
 static void Q15ResetState(struct Q15State* state) {
@@ -71,17 +76,17 @@ static int8_t Q15Covert(struct Q15Coeff* coeff, float b0, float b1, float b2, fl
         xshift++;
     }
 
-    if (xshift != coeff->shift) {
+    if ((31 - xshift) != coeff->shift) {
         diff_shift = 1;
     }
 
-    coeff->shift = 15 - xshift;
-    coeff->b0 = (int16_t)((int32_t)(b0 * 32768) >> xshift);
-    coeff->b1 = (int16_t)((int32_t)(b1 * 32768) >> xshift);
-    coeff->b2 = (int16_t)((int32_t)(b2 * 32768) >> xshift);
-    coeff->a1 = (int16_t)((int32_t)(a1 * 32768) >> xshift);
-    coeff->a2 = (int16_t)((int32_t)(a2 * 32768) >> xshift);
-    coeff->mask = (1 << (15 - xshift)) - 1;
+    coeff->shift = 31 - xshift;
+    coeff->b0 = (quan_t)((int64_t)(b0 * 2147483648ll) >> xshift);
+    coeff->b1 = (quan_t)((int64_t)(b1 * 2147483648ll) >> xshift);
+    coeff->b2 = (quan_t)((int64_t)(b2 * 2147483648ll) >> xshift);
+    coeff->a1 = (quan_t)((int64_t)(a1 * 2147483648ll) >> xshift);
+    coeff->a2 = (quan_t)((int64_t)(a2 * 2147483648ll) >> xshift);
+    coeff->mask = (1ull << (31 - xshift)) - 1;
 
     return diff_shift;
 }
