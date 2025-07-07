@@ -14,22 +14,23 @@ static void Q15Process(const struct Q15Coeff* coeff, struct Q15State* state, int
         // 如果要确保正确性，则改成int64_t
         // 性能则使用int32_t
         typedef int32_t acc_t;
-        acc_t sum = quantization
-            + (acc_t)(coeff->b0 * qx) + (acc_t)(coeff->b1 * xlatch1) + (acc_t)(coeff->b2 * xlatch2)
-            - (acc_t)(coeff->a1 * ylatch1) - (acc_t)(coeff->a2 * ylatch2);
-        quantization = sum & coeff->mask;
+        quantization += (acc_t)(coeff->b0 * qx);
+        quantization += (acc_t)(coeff->b1 * xlatch1);
+        quantization += (acc_t)(coeff->b2 * xlatch2);
+        quantization -= (acc_t)(coeff->a1 * ylatch1);
+        quantization -= (acc_t)(coeff->a2 * ylatch2);
 
         // 可改为处理器的饱和指令
-        sum >>= coeff->shift;
-        if (sum > 32767) sum = 32767;
-        else if (sum < -32768) sum = -32768;
+        int32_t temp = quantization >> coeff->shift;
+        if (temp > 32767) temp = 32767;
+        else if (temp < -32768) temp = -32768;
+        quantization &= coeff->mask;
 
-        int16_t yout = (int16_t)sum;
         xlatch2 = xlatch1;
         xlatch1 = qx;
         ylatch2 = ylatch1;
-        ylatch1 = yout;
-        x[i] = yout;
+        ylatch1 = (int16_t)temp;
+        x[i] = ylatch1;
     }
 
     state->xlatch1 = xlatch1;

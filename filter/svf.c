@@ -18,10 +18,9 @@ struct SVF {
         return out;
     }
 
-    void MakeBell(float cutoff, float q, float gain) {
-        //float A = std::pow(10.0f, gain / 40.0f);
-        float A = gain;
-        float g = std::tan(M_PI * cutoff / 2);
+    void MakeBell(float omega, float q, float gain) {
+        float A = std::pow(10.0f, gain / 40.0f);
+        float g = std::tan(omega / 2);
         float k = 1.0f / (q * A);
         a1 = 1.0f / (1.0f + g * (g + k));
         a2 = g * a1;
@@ -31,10 +30,9 @@ struct SVF {
         m2 = 0.0f;
     }
 
-    void MakeLowShelf(float cutoff, float q, float gain) {
-        //float A = std::pow(10.0f, gain / 40.0f);
-        float A = gain;
-        float g = std::tan(M_PI * cutoff / 2) / std::sqrt(A);
+    void MakeLowShelf(float omega, float q, float gain) {
+        float A = std::pow(10.0f, gain / 40.0f);
+        float g = std::tan(omega / 2) / std::sqrt(A);
         float k = 1.0f / q;
         a1 = 1.0f / (1.0f + g * (g + k));
         a2 = g * a1;
@@ -44,10 +42,9 @@ struct SVF {
         m2 = A * A - 1;
     }
 
-    void MakeHighShelf(float cutoff, float q, float gain) {
-        //float A = std::pow(10.0f, gain / 40.0f);
-        float A = gain;
-        float g = std::tan(M_PI * cutoff / 2) * std::sqrt(A);
+    void MakeHighShelf(float omega, float q, float gain) {
+        float A = std::pow(10.0f, gain / 40.0f);
+        float g = std::tan(omega / 2) * std::sqrt(A);
         float k = 1.0f / q;
         a1 = 1.0f / (1.0f + g * (g + k));
         a2 = g * a1;
@@ -55,5 +52,71 @@ struct SVF {
         m0 = A * A;
         m1 = k * (1 - A) * A;
         m2 = 1 - A * A;
+    }
+
+    void MakeLowpass(float omega, float Q) {
+        float g = std::tan(omega / 2);
+        float k = 1.0f / Q;
+        a1 = 1.0f / (1.0f + g * (g + k));
+        a2 = g * a1;
+        a3 = g * a2;
+        m0 = 0
+        m1 = 0;
+        m2 = 1;
+    }
+
+    void MakeHighpass(float omega, float Q) {
+        float g = std::tan(omega / 2);
+        float k = 1.0f / Q;
+        a1 = 1.0f / (1.0f + g * (g + k));
+        a2 = g * a1;
+        a3 = g * a2;
+        m0 = 1
+        m1 = -k;
+        m2 = -1;
+    }
+
+    void MakeBandpass(float omega, float Q) {
+        float g = std::tan(omega / 2);
+        float k = 1.0f / Q;
+        a1 = 1.0f / (1.0f + g * (g + k));
+        a2 = g * a1;
+        a3 = g * a2;
+        m0 = 0
+        m1 = 1;
+        m2 = 0;
+    }
+
+    void MakeNotch(float omega, float Q) {
+        float g = std::tan(omega / 2);
+        float k = 1.0f / Q;
+        a1 = 1.0f / (1.0f + g * (g + k));
+        a2 = g * a1;
+        a3 = g * a2;
+        m0 = 1
+        m1 = -k;
+        m2 = 0;
+    }
+
+    void MakePeak(float omega, float Q) {
+        float g = std::tan(omega / 2);
+        float k = 1.0f / Q;
+        a1 = 1.0f / (1.0f + g * (g + k));
+        a2 = g * a1;
+        a3 = g * a2;
+        m0 = 1
+        m1 = -k;
+        m2 = -2;
+    }
+
+    void MakeAllpass(float omega, float Q) {
+        float g = std::tan(omega / 2);
+        float k = 1.0f / Q;
+        a1 = 1.0f / (1.0f + g * (g + k));
+        a2 = g * a1;
+        a3 = g * a2;
+        m0 = 1
+        m1 = -2 * k;
+        m2 = -0;
     }
 };
