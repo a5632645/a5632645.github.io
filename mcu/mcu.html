@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单片机</title>
+
+    <link rel="stylesheet" href="../main.css">
+</head>
+<body>
+    <a href="../index.html">back</a>
+    <hr>
+    <h3>RISC-V bootloader不能跳转app</h3>
+    <div>
+        <p>RV机器要在<b>机器模式</b>才能跳转</p>
+        <p>非机器模式</p>
+        <pre>
+li t0, 0x6088
+csrw mstatus, t0
+        </pre>
+        <p>机器模式</p>
+        <pre>
+li t0, 0x7888           
+csrw mstatus, t0
+        </pre>
+    </div>
+</body>
+</html>
