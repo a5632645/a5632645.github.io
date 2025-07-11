@@ -11,7 +11,7 @@
     <a href="../index.html">back</a>
     <hr>
     <h3>RISC-V bootloader不能跳转app</h3>
-    <div>
+    <div class="frame">
         <p>RV机器要在<b>机器模式</b>才能跳转</p>
         <p>非机器模式</p>
         <pre>
@@ -23,6 +23,12 @@ csrw mstatus, t0
 li t0, 0x7888           
 csrw mstatus, t0
         </pre>
+    </div>
+
+    <h3>为什么HID报告符没有被请求</h3>
+    <div class="frame">
+        <p>傻了吧，复合设备的报告描述符走的标准请求</p>
+        <p>纯HID设备才会走类请求</p>
     </div>
 </body>
 </html>
