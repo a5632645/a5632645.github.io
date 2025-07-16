@@ -30,5 +30,28 @@ csrw mstatus, t0
         <p>傻了吧，复合设备的报告描述符走的标准请求</p>
         <p>纯HID设备才会走类请求</p>
     </div>
+
+    <h3>USB CDC怎么判断连接和断开</h3>
+    <div class="frame">
+        CDC_SET_LINE_CTLSTE请求
+        <pre class="frame">
+bool dtr_enabled = (pInformation->USBwValues.bw.bb0 & 0x01) != 0; // DTR位通常是最低位
+bool rts_enabled = (pInformation->USBwValues.bw.bb0 & 0x02) != 0; // RTS位可能是第二位
+if (dtr_enabled) {
+    can_cdc_send = TRUE;
+}
+else {
+    can_cdc_send = FALSE;
+}
+        </pre>
+    </div>
+
+    <h3>USB抓包得到babble detected</h3>
+    <div>
+        一般是TX寄存器的长度比描述符里的端点maxpacket大导致的
+    </div>
+
+    <hr>
+    write in 2025-7-16, update in 2025-7-16
 </body>
 </html>
