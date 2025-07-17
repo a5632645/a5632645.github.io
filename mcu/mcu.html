@@ -10,6 +10,7 @@
 <body>
     <a href="../index.html">back</a>
     <hr>
+
     <h3>RISC-V bootloader不能跳转app</h3>
     <div class="frame">
         <p>RV机器要在<b>机器模式</b>才能跳转</p>
@@ -23,6 +24,11 @@ csrw mstatus, t0
 li t0, 0x7888           
 csrw mstatus, t0
         </pre>
+    </div>
+
+    <h3>RISC-V链接器报错找不到符号__atomic_fetch_add_2/__atomic_fetch_sub_2</h3>
+    <div class="frame">
+        <p>这是因为RISC-V平台的原子操作不支持DWORD(i32)以下的类型</p>
     </div>
 
     <h3>为什么HID报告符没有被请求</h3>
@@ -47,11 +53,12 @@ else {
     </div>
 
     <h3>USB抓包得到babble detected</h3>
-    <div>
-        一般是TX寄存器的长度比描述符里的端点maxpacket大导致的
+    <div class="frame">
+        <p>翻译: 胡言乱语</p>
+        <p>一般是TX寄存器的长度比描述符里的端点maxpacket大导致的</p>
     </div>
 
     <hr>
-    write in 2025-7-16, update in 2025-7-16
+    write in 2025-7-16, update in 2025-7-17
 </body>
 </html>
