@@ -21,3 +21,7 @@ body{
 .hideable-btn{
     display: block;
 }
+
+img{
+    width: 100%;
+}
