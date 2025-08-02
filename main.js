@@ -14,3 +14,15 @@ for (let i = 0; i < buttons.length; i++) {
     });
     buttons[i].textContent = "显示";
 }
+
+let flash_links = document.querySelectorAll(".flash-link");
+for (let i = 0; i < flash_links.length; i++) {
+    flash_links[i].addEventListener("click", function() {
+        let target = flash_links[i].getAttribute('href');
+        let item = document.querySelector(target)
+        item.classList.add('flash-animation');
+        setTimeout(function() {
+            item.classList.remove('flash-animation');
+        }, 2000);
+    });
+}
