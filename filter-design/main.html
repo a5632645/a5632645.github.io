@@ -222,23 +222,98 @@ std::vector&ltBiquad> TfToBiquad(const std::vector&ltZPK>& digital) {
     </div>
     <div class="frame">
         <h3>切比雪夫I型</h3>
+        <p>切比雪夫I型也是纯极点滤波器，它的极点分布类似于一个沿实数轴压缩的椭圆（相对于巴特沃斯来说）。</p>
+        <img src="cheb1-poles.png" alt="cheb1-poles">
+        <p class="centered">Analog Filter翻译文本</p>
+        <pre>
+<code>
+std::vector&ltZPK> Chebyshev1(int num_filter, double ripple) {
+    std::vector&ltZPK> ret{static_cast&ltsize_t>(num_filter)};
+
+    int n = 2 * num_filter;
+    int i = 0;
+    double eps = std::sqrt(std::pow(10.0, ripple / 10.0) - 1.0);
+    double A = 1.0 / n * std::asinh(1.0 / eps);
+    double k_re = std::sinh(A);
+    double k_im = std::cosh(A);
+    for (int k = 1; k <= num_filter; ++k) {
+        double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
+        ret[i].p = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
+        ret[i].k = std::norm(ret[i].p);
+        ++i;
+    }
+    // 切比雪夫I型在DC处的增益, s = 0, 给到第一个滤波器
+    ret.front().k /= std::sqrt(1.0f + eps * eps);
+
+    return ret;
+}
+</code>
+        </pre>
+        <p>我没有使用最末尾那个-3dB的acosh计算，而是asinh，因为它表现的振幅响应不正确。</p>
+        <p>偶数的切比雪夫I型在DC处为</p>
+        <p>
+            \[\sqrt{1+\epsilon^{2}}\]
+        </p>
+        <p>奇数的为0，我们这里没有考虑奇数极点数的切比雪夫，所以让第一个滤波器的K除以DC处的增益。</p>
     </div>
     <div class="frame">
-        <h3>切比雪夫II型</h3>
+        <h3 class="no_warp">切比雪夫II型</h3><a href="https://en.wikipedia.org/wiki/Chebyshev_filter#Type_II_Chebyshev_filters_(inverse_Chebyshev_filters)">wikipedia</a><br>
+        <p>切比雪夫II型存在零点，如下图所示给出了零点极点的计算方式</p>
+        <img src="cheb2-poles.png" alt="cheb2-poles">
+        <p class="centered">wikipedia的零极点计算</p>
+        <img src="cheb2-ripple.png" alt="cheb2-ripple">
+        <p class="centered">wikipedia的涟漪幅度计算，y是正数（如想要-40dB,y=40）</p>
+        <pre>
+<code>
+std::vector&ltZPK> Chebyshev2(int num_filter, double ripple) {
+    std::vector&ltZPK> ret{static_cast&ltsize_t>(num_filter)};
+
+    int n = 2 * num_filter;
+    int i = 0;
+    double eps = 1.0 / std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0);
+    double A = 1.0 / n * std::asinh(1.0 / eps);
+    double k_re = std::sinh(A);
+    double k_im = std::cosh(A);
+    for (int k = 1; k <= num_filter; ++k) {
+        double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
+        ret[i].z = 1.0 / std::complex{0.0, std::cos(phi)};
+        ret[i].p = 1.0 / std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
+        ret[i].k = std::norm(ret[i].p) / std::norm(*ret[i].z);
+        ++i;
+    }
+
+    return ret;
+}
+</code>
+        </pre>
+        <p>ZPK中的K为1.0/DC处的增益</p>
     </div>
     <div class="frame">
         <h3>连续滤波器映射</h3>
         <div class="frame">
             <h4>原型到低通</h4>
+            <p>为了将原型低通滤波器映射到低通滤波器，我们只需要拉伸频率轴即可。</p>
+            <p>
+                \[s\xrightarrow[]{}\frac{s}{w_{c}}\]
+            </p>
         </div>
         <div class="frame">
             <h4>原型到高通</h4>
+            <p>
+                \[s\xrightarrow[]{}\frac{w_{c}}{s}\]
+            </p>
         </div>
         <div class="frame">
             <h4>原型到带通</h4>
+            <p>
+                \[s\xrightarrow[]{}\frac{s}{w_{c}}\]
+                \[s\xrightarrow[]{}\frac{s^{2}+w_{o}^2}{s}\]
+            </p>
         </div>
         <div class="frame">
             <h4>原型到带阻</h4>
+            \[s\xrightarrow[]{}\frac{w_{c}}{s}\]
+            \[s\xrightarrow[]{}\frac{s^{2}+w_{o}^2}{s}\]
         </div>
     </div>
     <script src="../main.js"></script>
