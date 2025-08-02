@@ -5,12 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>滤波器设计学习</title>
     <link rel="stylesheet" href="../main.css">
+    <!-- math -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <!-- code -->
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
 </head>
 <body>
     <a href="../index.html">back</a>
     <hr>
     <h1>滤波器设计学习</h1>
+    <p class="frame"><b>注意</b> 我不会讨论有关任何底层原理，如有需要请自己观看引用参考。</p>
     <div class="frame">
         <h3>双二阶滤波器(Biquad)</h3>
         <p>高阶的直接传递函数型设计的滤波器很容易受到精度影响，这会导致极点和零点漂移，甚至跑到单位圆外面导致不稳定，以及超高的量化噪声。</p>
@@ -24,13 +30,14 @@
         <hr>
         <p>一个biquad滤波器可以表示一对共轭零点和一对共轭极点，在接下来的计算中我都会忽略类型中的共轭复数。</p>
         <p>从传递函数的ZPK表示开始，Z=零点，P=极点，K=增益。</p>
-        <pre class="frame">
+        <pre>
+<code>
 struct ZPK {
     double k;
-    std::optional<std::complex<double>>> z; // 如果Null则在无穷远处
-    std::complex<double> p;
+    std::optional&ltstd::complex&ltdouble>>> z; // 如果Null则在无穷远处
+    std::complex&ltdouble> p;
 
-    std::complex<double> GetAnalogResponce(double omega) const {
+    std::complex&ltdouble> GetAnalogResponce(double omega) const {
         auto s = std::complex{0.0, omega};
         if (z) {
             auto up = (s - *z) * (s - std::conj(*z));
@@ -44,9 +51,19 @@ struct ZPK {
         }
     }
 };
+</code>
         </pre>
-        <img src="zpk.png" alt="ZPK">
-        <p>如上图所示，p^是指p的共轭复数，ε^s是指ε的共轭复数。它们描述了连续滤波器传递函数中的零点和极点。在代码中，分子为1时零点将记作std::nullopt。</p>
+        <div class="frame">
+            <p>
+                \[H(s)=k*\frac{(s-\epsilon)(s-\bar{\epsilon})}{(s-p)(s-\bar{p})}\]
+            </p>
+            <p class="centered">一个ZPK传递函数</p>
+            <p>
+                \[H(s)=k*\frac{1}{(s-p)(s-\bar{p})}\]
+            </p>
+            <p class="centered">只有极点的ZPK传递函数</p>
+        </div>
+        <p>如上式所示，p^是指p的共轭复数，ε^s是指ε的共轭复数。它们描述了连续滤波器传递函数中的零点和极点。在代码中，分子为1时零点将记作std::nullopt。</p>
     </div>
     <div class="frame">
         <h3 class="no_warp">原型巴特沃斯</h3>
@@ -59,9 +76,10 @@ struct ZPK {
         <p>右半平面的极点是不需要的，它们会导致滤波器不稳定（瞬态响应无限放大），去除之后的极点图如下所示</p>
         <img src="buterr-half-poles.png" alt="buterr-half-poles">
         <p>通过<a class="flash-link" href="#link-butter-poles">这里的公式</a>可以编写以下代码求解极点，注意，省略了另一个共轭极点。</p>
-        <pre class="frame">
-std::vector<ZPK> Butterworth(int num_filter) {
-    std::vector<ZPK> ret{static_cast<size_t>(num_filter)};
+        <pre>
+<code>
+std::vector&ltZPK> Butterworth(int num_filter) {
+    std::vector&ltZPK> ret{static_cast&ltsize_t>(num_filter)};
 
     int n = 2 * num_filter;
     int i = 0;
@@ -74,6 +92,7 @@ std::vector<ZPK> Butterworth(int num_filter) {
 
     return ret;
 }
+</code>
         </pre>
         <p>一个biquad有着一对共轭极点，所以n = 2 * num_filter，由于没有零点，zpk::p默认初始化为nullopt。</p>
         <p>使用以上的zpk，我们将得到一个|H(1j)| = -3dB的低通滤波器。</p>
@@ -82,14 +101,21 @@ std::vector<ZPK> Butterworth(int num_filter) {
         <h3 class="no_warp">双线性映射</h3><a href="https://en.wikipedia.org/wiki/Bilinear_transform">wikipedia</a><br>
         <p>好吧，我们先暂时跳过其他滤波器和连续滤波器映射，先来验证我们的代码。</p>
         <p>首先，我使用的是ZPK形式的传递函数，基本上它可以写成这样表示</p>
-        <img src="zpk-cascade.png" alt="zpk-cascade">
+        <p>
+            \[ZPK\space\space\space H_{n}(s)=K_{n}\frac{(s-\epsilon)(s-\bar{\epsilon})}{(s-p)(s-\bar{p})}\]
+        </p>
+        <p>
+            \[H_{filter}(s)=H_{0}(s)*H_{1}(s)*H_{2}(s)......\]
+        </p>
         <p class="centered">传递函数由许多单个ZPK相乘，对应滤波器的级联</p>
-        <p class="frame"><b>注意</b> 我不会讨论有关任何底层原理，如有需要请自己观看引用参考。</p>
         <p>为了从连续传递函数H(s)获取离散传递函数H(z)，我使用双线性变换进行离散化。</p>
         <img src="bilinear-s-z.png" alt="bilinear-s-z">
         <p class="centered">双线性变换由s到z</p>
         <p>通过将上述变换代入H(s)，上述式子将会代替原有ZPK中的所有s,从而得到一个由z组成的ZPK传递函数</p>
         <div class="frame">
+            <p>
+                \[k=2*采样率=\frac{2}{T}\]
+            </p>
             <p>
                 \[H(s)=\frac{(s-\epsilon)(s-\bar{\epsilon})}{(s-p)(s-\bar{p})}*K_{f}\]
             </p>
@@ -99,6 +125,9 @@ std::vector<ZPK> Butterworth(int num_filter) {
         </div>
         <div class="frame">
             <p>
+                \[k=2*采样率=\frac{2}{T}\]
+            </p>
+            <p>
                 \[H(s)=\frac{1}{(s-p)(s-\bar{p})}*K_{f}\]
             </p>
             <p>
@@ -106,12 +135,13 @@ std::vector<ZPK> Butterworth(int num_filter) {
             </p>
         </div>
         <p>如上公式所示，前面的部分为零点和极点，后面的部分为增益，不加证明，新的到的零点和极点也是共轭的，因此我们只保留一个，从而写出以下代码</p>
-<pre class="frame">
-std::vector<ZPK> Bilinear(const std::vector<ZPK>& analog, double fs) {
-    std::vector<ZPK> ret{analog.size()};
+        <pre>
+<code>
+std::vector&ltZPK> Bilinear(const std::vector&ltZPK>& analog, double fs) {
+    std::vector&ltZPK> ret{analog.size()};
 
     std::complex k = 2.0 * fs;
-    int num_filter = static_cast<int>(analog.size());
+    int num_filter = static_cast&ltint>(analog.size());
     for (int i = 0; i < num_filter; ++i) {
         const ZPK& s = analog[i];
         ZPK& z = ret[i];
@@ -129,10 +159,11 @@ std::vector<ZPK> Bilinear(const std::vector<ZPK>& analog, double fs) {
 
     return ret;
 }
-</pre>
+</code>
+        </pre>
     </div>
     <div class="frame">
-        <h3>离散ZPF到biquad</h3>
+        <h3>离散ZPK到biquad</h3>
         <p>好的，我们已经完成了离散化这一步并得到了离散的ZPK，接下来需要将ZPK转换为biquad</p>
         <div class="frame">
             <p>
@@ -142,6 +173,7 @@ std::vector<ZPK> Bilinear(const std::vector<ZPK>& analog, double fs) {
         </div>
         <div class="frame">
             <pre>
+<code>
 struct Biquad {
     double a1;
     double a2;
@@ -149,13 +181,14 @@ struct Biquad {
     double b1;
     double b2;
 
-    std::complex<double> GetResponce(double omega) const {
+    std::complex&ltdouble> GetResponce(double omega) const {
         auto z = std::polar(1.0, omega);
         auto up = b0 * z * z + b1 * z + b2;
         auto down = z * z + a1 * z + a2;
         return up / down;
     }
 };
+</code>
             </pre>
             <p class="centered">一个简单biquad结构体</p>
         </div>
@@ -166,9 +199,10 @@ struct Biquad {
             <p class="centered">一个离散ZPK</p>
         </div>
         <p>根据上述两个公式，很容易就能推导出biquad中各个参数的计算，因此我们可以写下以下代码</p>
-        <pre class="frame">
-std::vector<Biquad> TfToBiquad(const std::vector<ZPK>& digital) {
-    std::vector<Biquad> ret{digital.size()};
+        <pre>
+<code>
+std::vector&ltBiquad> TfToBiquad(const std::vector&ltZPK>& digital) {
+    std::vector&ltBiquad> ret{digital.size()};
 
     size_t num_filter = digital.size();
     for (size_t i = 0; i < num_filter; ++i) {
@@ -183,6 +217,7 @@ std::vector<Biquad> TfToBiquad(const std::vector<ZPK>& digital) {
 
     return ret;
 }
+</code>
         </pre>
     </div>
     <div class="frame">
