@@ -386,7 +386,7 @@ std::vector<ZPK> ProtyleToHighpass(const std::vector<ZPK>& protyle, double cutof
                 \begin{equation}\begin{aligned} H(\frac{s^{2}+wo^{2}}{s})&=\frac{(s^{2}-s\epsilon+w_o^{2})(s^{2}-s\bar{\epsilon}+w_o^{2})}{(s^{2}-sp+w_o^{2})(s^{2}-s\bar{p}+w_o^{2})}*K_f \end{aligned}\end{equation}
             </p>
             <p>
-                \begin{equation}\begin{aligned} H(\frac{s^{2}+wo^{2}}{s})&=\frac{s-0}{(s^{2}-sp+w_o^{2})(s^{2}-s\bar{p}+w_o^{2})}*K_f \end{aligned}\end{equation}
+                \begin{equation}\begin{aligned} H(\frac{s^{2}+wo^{2}}{s})&=\frac{(s-0)^{2}}{(s^{2}-sp+w_o^{2})(s^{2}-s\bar{p}+w_o^{2})}*K_f \end{aligned}\end{equation}
             </p>
             <p>
                 这里我们使用二次方程的通项公式对四个方程直接进行求解，由于它们都有相同的形式，在此用下列方程代替
@@ -409,7 +409,7 @@ std::vector<ZPK> ProtyleToHighpass(const std::vector<ZPK>& protyle, double cutof
                 \[ H(s)=\frac{(s-Root_0(\epsilon))(s-Root_1(\epsilon))(s-\overline{Root_0(\epsilon)})(s-\overline{Root_1(\epsilon)})}{(s-Root_0(p))(s-Root_1(p))(s-\overline{Root_0(p)})(s-\overline{Root_1(p)})}*K_f \]
             </p>
             <p>
-                \[ H(s)=\frac{s-0}{(s-Root_0(p))(s-Root_1(p))(s-\overline{Root_0(p)})(s-\overline{Root_1(p)})}*K_f \]
+                \[ H(s)=\frac{(s-0)^{2}}{(s-Root_0(p))(s-Root_1(p))(s-\overline{Root_0(p)})(s-\overline{Root_1(p)})}*K_f \]
             </p>
             <p><b>注意</b> 由于我们在将一个ZPK拆成两个ZPK，由上面的公式可以看出Kf是不变的，为了保持ZPK*ZPK的K不变，拆除的ZPK的K应该为原来ZPk的K的开平方。</p>
             <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
