@@ -1,0 +1,32 @@
+
+body{
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+body > div:last-child{
+    height: 10px;
+}
+
+.mulu_container{
+    flex-grow: 1;
+    display: flex;
+    flex-direction: row;
+}
+
+.mulu_container > div:first-child{
+    overflow-x: auto;
+    white-space: nowrap;
+    border: 1px black solid;
+    margin: 0px 2px;
+    width: auto;
+}
+
+.mulu_container > div:last-child{
+    display: block;
+    overflow-y: scroll;
+    flex-grow: 1;
+    height: calc(90vh - 10px);
+    border: 1px black solid;
+}
