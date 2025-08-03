@@ -16,7 +16,7 @@
     <a href="../index.html">back</a>
     <hr>
     <h1>滤波器设计学习</h1>
-    <p class="frame"><b>注意</b> 我不会讨论有关任何底层原理，如有需要请自己观看引用参考。</p>
+    <p class="frame"><b>注意</b> 我不会讨论有关任何底层原理，如有需要请自己搜索相关内容。</p>
     <div class="frame">
         <h3>双二阶滤波器(Biquad)</h3>
         <p>高阶的直接传递函数型设计的滤波器很容易受到精度影响，这会导致极点和零点漂移，甚至跑到单位圆外面导致不稳定，以及超高的量化噪声。</p>
@@ -255,6 +255,8 @@ std::vector&ltZPK> Chebyshev1(int num_filter, double ripple) {
             \[\sqrt{1+\epsilon^{2}}\]
         </p>
         <p>奇数的为0，我们这里没有考虑奇数极点数的切比雪夫，所以让第一个滤波器的K除以DC处的增益。</p>
+        <p>ZPK中的K为零极点在DC处产生的增益倒数，目标是让滤波器的DC增益为1。</p>
+        <p class="frame"><b>注意</b> 这里还需要进一步优化，让w=1处于-3dB，而且涟漪不能超过0dB.</p>
     </div>
     <div class="frame">
         <h3 class="no_warp">切比雪夫II型</h3><a href="https://en.wikipedia.org/wiki/Chebyshev_filter#Type_II_Chebyshev_filters_(inverse_Chebyshev_filters)">wikipedia</a><br>
@@ -286,7 +288,8 @@ std::vector&ltZPK> Chebyshev2(int num_filter, double ripple) {
 }
 </code>
         </pre>
-        <p>ZPK中的K为1.0/DC处的增益</p>
+        <p>ZPK中的K为零极点在DC处产生的增益倒数，目标是让滤波器的DC增益为1。</p>
+        <p class="frame"><b>注意</b> 这里的滤波器没有做到在w=1处为-3dB，你可能需要使用频率求解函数来计算真正的wc</p>
     </div>
     <div class="frame">
         <h3>连续滤波器映射</h3>
@@ -296,24 +299,227 @@ std::vector&ltZPK> Chebyshev2(int num_filter, double ripple) {
             <p>
                 \[s\xrightarrow[]{}\frac{s}{w_{c}}\]
             </p>
+            <p>
+                \begin{equation}\begin{aligned} H(\frac{s}{w_c})&=\frac{(\frac{s}{w_c}-\epsilon)(\frac{s}{w_c}-\bar{\epsilon})}{(\frac{s}{w_c}-p)(\frac{s}{w_c}-\bar{p})}*K_f \\ &= \frac{(s-w_c\epsilon)(s-w_c\bar{\epsilon})}{(s-w_cp)(s-w_c\bar{p})}*K_f \end{aligned}\end{equation}
+            </p>
+            <p>
+                \begin{equation}\begin{aligned} H(\frac{s}{w_c})&=\frac{K_f}{(\frac{s}{w_c}-p)(\frac{s}{w_c}-\bar{p})} \\ &= \frac{K_f*w_c^{2}}{(s-w_cp)(s-w_c\bar{p})} \end{aligned}\end{equation}
+            </p>
+            <p>通过上面两个公式，我们很快可以写出计算映射之后的零点极点以及增益，从而写出以下代码</p>
+            <pre>
+<code>
+std::vector&ltZPK> ProtyleToLowpass(const std::vector<ZPK>& analog, double cutoff_freq) {
+    std::vector&ltZPK> ret{analog.size()};
+    double omega = cutoff_freq * pi * 2.0;
+    for (size_t i = 0; i < analog.size(); ++i) {
+        const auto& s = analog[i];
+        auto& lps = ret[i];
+        lps.k = s.k * omega * omega;
+        lps.p = ScaleComplex(s.p, omega);
+        if (s.z) {
+            lps.z = ScaleComplex(*s.z, omega);
+            lps.k = s.k;
+        }
+    }
+    return ret;
+}
+</code>
+            </pre>
         </div>
         <div class="frame">
             <h4>原型到高通</h4>
             <p>
                 \[s\xrightarrow[]{}\frac{w_{c}}{s}\]
             </p>
+            <p>
+                \begin{equation}\begin{aligned} H(\frac{w_c}{s}) &= \frac{(\frac{w_c}{s}-\epsilon)(\frac{w_c}{s}-\bar{\epsilon})}{(\frac{w_c}{s}-p)(\frac{w_c}{s}-\bar{p})}*K_f \\ &= \frac{(\frac{w_c}{\epsilon}-s)(\frac{w_c}{\bar{\epsilon}}-s)}{(\frac{w_c}{p}-s)(\frac{w_c}{\bar{p}}-s)}*\frac{\epsilon\bar{\epsilon}*K_f}{p\bar{p}} \\ &= \frac{(s-\frac{w_c}{\epsilon})(s-\frac{w_c}{\bar{\epsilon}})}{(s-\frac{w_c}{p})(s-\frac{w_c}{\bar{p}})}*\frac{\epsilon\bar{\epsilon}*K_f}{p\bar{p}} \end{aligned}\end{equation}
+            </p>
+            <p>
+                \begin{equation}\begin{aligned} H(\frac{w_c}{s}) &= \frac{K_f}{(\frac{w_c}{s}-p)(\frac{w_c}{s}-p)} \\&= \frac{(s-0)^2}{(s-\frac{w_c}{p})(s-\frac{w_c}{\bar{p}})}*\frac{K_f}{p\bar{p}} \end{aligned}\end{equation}
+            </p>
+            <p>这样我们获得了映射之后的零极点</p>
+            <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
+            <pre>
+<code>
+std::vector<ZPK> ProtyleToHighpass(const std::vector<ZPK>& protyle, double cutoff_freq) {
+    std::vector<ZPK> ret{protyle.size()};
+    double omega = cutoff_freq * 2 * pi;
+    for (size_t i = 0; i < protyle.size(); ++i) {
+        const auto& s = protyle[i];
+        auto& hps = ret[i];
+        hps.k = s.k / std::norm(s.p);
+        hps.p = omega / s.p;
+        if (s.z) {
+            hps.k *= std::norm(*s.z);
+            hps.z = omega / *s.z;
+        }
+        else {
+            hps.z = 0;
+        }
+    }
+    return ret;
+}
+</code>
+            </pre>
         </div>
         <div class="frame">
             <h4>原型到带通</h4>
+            <p>带通滤波器有两个参数，它们有着许多的组合，在这里我使用截止频率wc和Q作为参数。</p>
             <p>
-                \[s\xrightarrow[]{}\frac{s}{w_{c}}\]
+                \[Q=\frac{w_c}{bw} \xrightarrow[]{} bw=\frac{w_c}{Q} \]
+            </p>
+            <p>第一步我们先映射一个截止频率位于bw/2的低通滤波器</p>
+            <p>
+                \[s\xrightarrow[]{}\frac{s}{\frac{bw}{2}}\]
+            </p>
+            <p>我们在上面已经推导了低通映射的ZPK，在此不重复。</p>
+            <p>第二部使用下面的映射函数将低通变为带通，中心频率为wo</p>
+            <p>
                 \[s\xrightarrow[]{}\frac{s^{2}+w_{o}^2}{s}\]
             </p>
+            <p>
+                \[ w_0=w_c-\frac{bw}{2} \space\space w_1=w_c+\frac{bw}{2} \]
+                \[ w_o=\sqrt{w_0w_1} \]
+            </p>
+            <p>在这里展开H(s)的过程实在是太长了，因此我只写结论</p>
+            <p>
+                \begin{equation}\begin{aligned} H(\frac{s^{2}+wo^{2}}{s})&=\frac{(s^{2}-s\epsilon+w_o^{2})(s^{2}-s\bar{\epsilon}+w_o^{2})}{(s^{2}-sp+w_o^{2})(s^{2}-s\bar{p}+w_o^{2})}*K_f \end{aligned}\end{equation}
+            </p>
+            <p>
+                \begin{equation}\begin{aligned} H(\frac{s^{2}+wo^{2}}{s})&=\frac{s-0}{(s^{2}-sp+w_o^{2})(s^{2}-s\bar{p}+w_o^{2})}*K_f \end{aligned}\end{equation}
+            </p>
+            <p>
+                这里我们使用二次方程的通项公式对四个方程直接进行求解，由于它们都有相同的形式，在此用下列方程代替
+            </p>
+            <p>
+                \[ s^{2}-s*c+w_o^{2}=0 \]
+            </p>
+            <p>
+                \[ Root_0(c)=\frac{c+\sqrt{c^{2}-4w_o^{4}}}{2} \space\space\space\space Root_1(c)=\frac{c-\sqrt{c^{2}-4w_o^{2}}}{2} \]
+            </p>
+            <p>通过一些小小的验证，我们足以发现以下关系</p>
+            <p>
+                \[ Root_0(c)与Root_0(\bar{c})是共轭复数，对Root_1也是如此 \]
+            </p>
+            <p>
+                \[ 即Root_0(c)\xrightarrow[]{}\overline{Root_0(\bar{c})} \]
+            </p>
+            <p>因此我们得到以下公式</p>
+            <p>
+                \[ H(s)=\frac{(s-Root_0(\epsilon))(s-Root_1(\epsilon))(s-\overline{Root_0(\epsilon)})(s-\overline{Root_1(\epsilon)})}{(s-Root_0(p))(s-Root_1(p))(s-\overline{Root_0(p)})(s-\overline{Root_1(p)})}*K_f \]
+            </p>
+            <p>
+                \[ H(s)=\frac{s-0}{(s-Root_0(p))(s-Root_1(p))(s-\overline{Root_0(p)})(s-\overline{Root_1(p)})}*K_f \]
+            </p>
+            <p><b>注意</b> 由于我们在将一个ZPK拆成两个ZPK，由上面的公式可以看出Kf是不变的，为了保持ZPK*ZPK的K不变，拆除的ZPK的K应该为原来ZPk的K的开平方。</p>
+            <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
+            <p>由此写下以下代码</p>
+            <pre>
+<code>
+std::vector&ltZPK> ProtyleToBandpass(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
+    double w = fcutoff * 2 * pi;
+    double bw = w / Q;
+    double w0 = w - bw / 2;
+    double w1 = w + bw / 2;
+    double wo = std::sqrt(w0 * w1);
+    std::vector&ltZPK> ret{protyle.size() * 2};
+    for (size_t i = 0; i < protyle.size(); ++i) {
+        ZPK s;
+        {
+            auto const& ss = protyle[i];
+            s.k = ss.k * bw * bw / 4;
+            s.p = ScaleComplex(ss.p, bw / 2);
+            if (ss.z) {
+                s.k = ss.k;
+                s.z = ScaleComplex(*ss.z, bw / 2);
+            }
+        }
+        auto& bp1 = ret[2 * i];
+        auto& bp2 = ret[2 * i + 1];
+        if (s.z) {
+            auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+            auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
+            bp1.p = ScaleComplex(s.p + p_delta, 0.5);
+            bp2.p = ScaleComplex(s.p - p_delta, 0.5);
+            bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
+            bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
+            bp1.k = std::sqrt(s.k);
+            bp2.k = std::sqrt(s.k);
+        }
+        else {
+            auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+            bp1.p = ScaleComplex(s.p + delta, 0.5);
+            bp2.p = ScaleComplex(s.p - delta, 0.5);
+            bp1.z = 0;
+            bp1.k = std::sqrt(s.k);
+            bp2.k = std::sqrt(s.k);
+        }
+    }
+    return ret;
+}
+</code>
+            </pre>
         </div>
         <div class="frame">
             <h4>原型到带阻</h4>
-            \[s\xrightarrow[]{}\frac{w_{c}}{s}\]
-            \[s\xrightarrow[]{}\frac{s^{2}+w_{o}^2}{s}\]
+            <p>和带通类似，首先我们映射一个高通滤波器</p>
+            <p>
+                \[s\xrightarrow[]{}\frac{w_{c}}{s}\]
+            </p>
+            <p>然后我们可以使用带通的结论将高通滤波器映射为带阻滤波器</p>
+            <p>
+                \[s\xrightarrow[]{}\frac{s^{2}+w_{o}^2}{s}\]
+            </p>
+            <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
+            <p>因此，我们可以写出以下代码</p>
+            <pre>
+<code>
+std::vector&ltZPK> ProtyleToBandstop(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
+    double w = fcutoff * 2 * pi;
+    double bw = w / Q;
+    double w0 = w - bw / 2;
+    double w1 = w + bw / 2;
+    double wo = std::sqrt(w0 * w1);
+    std::vector&ltZPK> ret{protyle.size() * 2};
+    for (size_t i = 0; i < protyle.size(); ++i) {
+        ZPK s;
+        {
+            auto const& ss = protyle[i];
+            s.k = ss.k / std::norm(ss.p);
+            s.p = bw * 0.5 / ss.p;
+            if (ss.z) {
+                s.k *= std::norm(*ss.z);
+                s.z = bw * 0.5 / *ss.z;
+            }
+            else {
+                s.z = 0;
+            }
+        }
+        auto& bp1 = ret[2 * i];
+        auto& bp2 = ret[2 * i + 1];
+        if (s.z) {
+            auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+            auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
+            bp1.p = ScaleComplex(s.p + p_delta, 0.5);
+            bp2.p = ScaleComplex(s.p - p_delta, 0.5);
+            bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
+            bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
+            bp1.k = std::sqrt(s.k);
+            bp2.k = std::sqrt(s.k);
+        }
+        else {
+            auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+            bp1.p = ScaleComplex(s.p + delta, 0.5);
+            bp2.p = ScaleComplex(s.p - delta, 0.5);
+            bp1.z = 0;
+            bp1.k = std::sqrt(s.k);
+            bp2.k = std::sqrt(s.k);
+        }
+    }
+    return ret;
+}
+</code>
+            </pre>
         </div>
     </div>
     <script src="../main.js"></script>
