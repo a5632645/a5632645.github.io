@@ -19,7 +19,8 @@ body{
     white-space: nowrap;
     border: 1px black solid;
     margin: 0px 2px;
-    width: max-content;
+    overflow: auto;
+    min-width: max(20vw, 200px);
 }
 
 .mulu_container > div:last-child{
@@ -27,4 +28,21 @@ body{
     overflow-y: auto;
     flex-grow: 1;
     border: 1px black solid;
+}
+
+@media screen and (max-width: 600px) {
+    body{
+        height: 90vh;
+    }
+
+    .mulu_container{
+        flex-direction: column;
+    }
+
+    .mulu_container > div:first-child{
+        width: 100%;
+        max-width: 100%;
+        min-height: 25%;
+        overflow: auto;
+    }
 }

@@ -109,6 +109,10 @@
                     </pre>
                 <p>一个biquad有着一对共轭极点，所以n = 2 * num_filter，由于没有零点，zpk::p默认初始化为nullopt。</p>
                 <p>使用以上的zpk，我们将得到一个|H(1j)| = -3dB的低通滤波器。</p>
+                <img src="pzmap-analog-butter.png" alt="pzmap-analog-butter">
+                <p class="centered">生成的极点分布</p>
+                <img src="bode-butter.png" alt="bode-butter">
+                <p class="centered">振幅响应，截止w = 1</p>
             </div>
             <div class="frame">
                 <h3 class="no_warp">双线性映射</h3><a
@@ -183,6 +187,10 @@
             }
             </code>
                     </pre>
+                    <img src="pzmap-bilinear-butter.png" alt="pzmap-bilinear-butter">
+                    <p class="centered">双线性变换之后的零极点</p>
+                    <img src="bode-bilinear-butter.png" alt="bode-bilinear-butter">
+                    <p class="centered">数字滤波器的振幅响应</p>
             </div>
             <div class="frame">
                 <h3>离散ZPK到biquad</h3>
@@ -282,6 +290,10 @@
                 <p>奇数的为0，我们这里没有考虑奇数极点数的切比雪夫，所以让第一个滤波器的K除以DC处的增益。</p>
                 <p>ZPK中的K为零极点在DC处产生的增益倒数，目标是让滤波器的DC增益为1。</p>
                 <p class="frame"><b>注意</b> 这里还需要进一步优化，让w=1处于-3dB，而且涟漪不能超过0dB.</p>
+                <img src="pzmap-analog-cheb1.png" alt="pzmap-analog-cheb1">
+                <p class="centered">切比雪夫I型原型零极点</p>
+                <img src="bode-cheb1.png" alt="bode-cheb1">
+                <p class="centered">切比雪夫I型振幅响应</p>
             </div>
             <div class="frame">
                 <h3 class="no_warp">切比雪夫II型</h3><a
@@ -316,6 +328,10 @@
                     </pre>
                 <p>ZPK中的K为零极点在DC处产生的增益倒数，目标是让滤波器的DC增益为1。</p>
                 <p class="frame"><b>注意</b> 这里的滤波器没有做到在w=1处为-3dB，你可能需要使用频率求解函数来计算真正的wc</p>
+                <img src="pzmap-analog-cheb2.png" alt="pzmap-analog-cheb2">
+                <p class="centered">切比雪夫II型原型零极点</p>
+                <img src="bode-cheb2.png" alt="bode-cheb2">
+                <p class="centered">切比雪夫II型原型振幅响应</p>
             </div>
             <div class="frame">
                 <h3>连续滤波器映射</h3>
@@ -356,6 +372,18 @@
             }
             </code>
                         </pre>
+                        <img src="lowpass/pzmap-butter-lowpass.png" alt="pzmap-butter-lowpass">
+                        <p class="centered">10hz, 20hz FS巴特沃斯零极点</p>
+                        <img src="lowpass/bode-butter-lowpass.png" alt="bode-butter-lowpass">
+                        <p class="centered">10hz, 20hz FS巴特沃斯振幅响应</p>
+                        <img src="lowpass/pzmap-cheb1-lowpass.png" alt="pzmap-cheb1-lowpass">
+                        <p class="centered">10hz, 20hz FS切比雪夫I零极点</p>
+                        <img src="lowpass/bode-cheb1-lowpass.png" alt="bode-cheb1-lowpass">
+                        <p class="centered">10hz, 20hz FS切比雪夫I振幅响应</p>
+                        <img src="lowpass/pzmap-cheb2-lowpass.png" alt="pzmap-cheb2-lowpass">
+                        <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
+                        <img src="lowpass/bode-cheb2-lowpass.png" alt="bode-cheb2-lowpass">
+                        <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
                 </div>
                 <div class="frame">
                     <h4>原型到高通</h4>
@@ -401,6 +429,18 @@
             }
             </code>
                         </pre>
+                        <img src="highpass/pzmap-butter-highpass.png" alt="pzmap-butter-highpass">
+                        <p class="centered">10hz, 20hz FS巴特沃斯零极点</p>
+                        <img src="highpass/bode-butter-highpass.png" alt="bode-butter-highpass">
+                        <p class="centered">10hz, 20hz FS巴特沃斯振幅响应</p>
+                        <img src="highpass/pzmap-cheb1-highpass.png" alt="pzmap-cheb1-highpass">
+                        <p class="centered">10hz, 20hz FS切比雪夫I零极点</p>
+                        <img src="highpass/bode-cheb1-highpass.png" alt="bode-cheb1-highpass">
+                        <p class="centered">10hz, 20hz FS切比雪夫I振幅响应</p>
+                        <img src="highpass/pzmap-cheb2-highpass.png" alt="pzmap-cheb2-highpass">
+                        <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
+                        <img src="highpass/bode-cheb2-highpass.png" alt="bode-cheb2-highpass">
+                        <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
                 </div>
                 <div class="frame">
                     <h4>原型到带通</h4>
@@ -508,6 +548,18 @@
             }
             </code>
                         </pre>
+                        <img src="bandpass/pzmap-butter.png" alt="pzmap-butter-bandpass">
+                        <p class="centered">10hz, Q=5, 20hz FS巴特沃斯零极点</p>
+                        <img src="bandpass/bode-butter.png" alt="bode-butter-bandpass">
+                        <p class="centered">10hz, Q=5, 20hz FS巴特沃斯振幅响应</p>
+                        <img src="bandpass/pzmap-cheb1.png" alt="pzmap-cheb1-bandpass">
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫I零极点</p>
+                        <img src="bandpass/bode-cheb1.png" alt="bode-cheb1-bandpass">
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫I振幅响应</p>
+                        <img src="bandpass/pzmap-cheb2.png" alt="pzmap-cheb2-bandpass">
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
+                        <img src="bandpass/bode-cheb2.png" alt="bode-cheb2-bandpass">
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
                 </div>
                 <div class="frame">
                     <h4>原型到带阻</h4>
@@ -569,6 +621,18 @@
             }
             </code>
                         </pre>
+                        <img src="bandstop/pzmap-butter.png" alt="pzmap-butter-bandstop">
+                        <p class="centered">10hz, Q=5, 20hz FS巴特沃斯零极点</p>
+                        <img src="bandstop/bode-butter.png" alt="bode-butter-bandstop">
+                        <p class="centered">10hz, Q=5, 20hz FS巴特沃斯振幅响应</p>
+                        <img src="bandstop/pzmap-cheb1.png" alt="pzmap-cheb1-bandstop">
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫I零极点</p>
+                        <img src="bandstop/bode-cheb1.png" alt="bode-cheb1-bandstop">
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫I振幅响应</p>
+                        <img src="bandstop/pzmap-cheb2.png" alt="pzmap-cheb2-bandstop">
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
+                        <img src="bandstop/bode-cheb2.png" alt="bode-cheb2-bandstop">
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
                 </div>
             </div>
         </div>
