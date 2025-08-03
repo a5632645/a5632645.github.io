@@ -128,7 +128,7 @@
                 <p class="centered">传递函数由许多单个ZPK相乘，对应滤波器的级联</p>
                 <p>为了从连续传递函数H(s)获取离散传递函数H(z)，我使用双线性变换进行离散化。</p>
                 <img src="bilinear-s-z.png" alt="bilinear-s-z">
-                <p class="centered">双线性变换由s到z</p>
+                <p class="centered">双线性变换用z代替s</p>
                 <p>通过将上述变换代入H(s)，上述式子将会代替原有ZPK中的所有s,从而得到一个由z组成的ZPK传递函数</p>
                 <div class="frame">
                     <p>
@@ -339,7 +339,7 @@
                     <h4>原型到低通</h4>
                     <p>为了将原型低通滤波器映射到低通滤波器，我们只需要拉伸频率轴即可。</p>
                     <p>
-                        \[s\xrightarrow[]{}\frac{s}{w_{c}}\]
+                        \[s\xleftarrow[]{}\frac{s}{w_{c}}\]
                     </p>
                     <p>
                         \begin{equation}\begin{aligned}
@@ -383,12 +383,12 @@
                         <img src="lowpass/pzmap-cheb2-lowpass.png" alt="pzmap-cheb2-lowpass">
                         <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
                         <img src="lowpass/bode-cheb2-lowpass.png" alt="bode-cheb2-lowpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
+                        <p class="centered">10hz, 20hz FS切比雪夫II振幅响应</p>
                 </div>
                 <div class="frame">
                     <h4>原型到高通</h4>
                     <p>
-                        \[s\xrightarrow[]{}\frac{w_{c}}{s}\]
+                        \[s\xleftarrow[]{}\frac{w_{c}}{s}\]
                     </p>
                     <p>
                         \begin{equation}\begin{aligned} H(\frac{w_c}{s}) &=
@@ -440,7 +440,7 @@
                         <img src="highpass/pzmap-cheb2-highpass.png" alt="pzmap-cheb2-highpass">
                         <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
                         <img src="highpass/bode-cheb2-highpass.png" alt="bode-cheb2-highpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
+                        <p class="centered">10hz, 20hz FS切比雪夫II振幅响应</p>
                 </div>
                 <div class="frame">
                     <h4>原型到带通</h4>
@@ -450,44 +450,40 @@
                     </p>
                     <p>第一步我们先映射一个截止频率位于bw/2的低通滤波器</p>
                     <p>
-                        \[s\xrightarrow[]{}\frac{s}{\frac{bw}{2}}\]
+                        \[s\xleftarrow[]{}\frac{s}{\frac{bw}{2}}\]
                     </p>
                     <p>我们在上面已经推导了低通映射的ZPK，在此不重复。</p>
-                    <p>第二部使用下面的映射函数将低通变为带通，中心频率为wo</p>
+                    <p>第二部使用下面的映射函数将低通变为带通，中心频率为wc</p>
                     <p>
-                        \[s\xrightarrow[]{}\frac{s^{2}+w_{o}^2}{s}\]
-                    </p>
-                    <p>
-                        \[ w_0=w_c-\frac{bw}{2} \space\space w_1=w_c+\frac{bw}{2} \]
-                        \[ w_o=\sqrt{w_0w_1} \]
+                        \[s\xleftarrow[]{}\frac{s^{2}+w_{c}^2}{s}\]
                     </p>
                     <p>在这里展开H(s)的过程实在是太长了，因此我只写结论</p>
                     <p>
                         \begin{equation}\begin{aligned}
-                        H(\frac{s^{2}+wo^{2}}{s})&=\frac{(s^{2}-s\epsilon+w_o^{2})(s^{2}-s\bar{\epsilon}+w_o^{2})}{(s^{2}-sp+w_o^{2})(s^{2}-s\bar{p}+w_o^{2})}*K_f
+                        H(\frac{s^{2}+wc^{2}}{s})&=\frac{(s^{2}-s\epsilon+w_c^{2})(s^{2}-s\bar{\epsilon}+w_c^{2})}{(s^{2}-sp+w_c^{2})(s^{2}-s\bar{p}+w_c^{2})}*K_f
                         \end{aligned}\end{equation}
                     </p>
                     <p>
                         \begin{equation}\begin{aligned}
-                        H(\frac{s^{2}+wo^{2}}{s})&=\frac{(s-0)^{2}}{(s^{2}-sp+w_o^{2})(s^{2}-s\bar{p}+w_o^{2})}*K_f
+                        H(\frac{s^{2}+wc^{2}}{s})&=\frac{(s-0)^{2}}{(s^{2}-sp+w_c^{2})(s^{2}-s\bar{p}+w_c^{2})}*K_f
                         \end{aligned}\end{equation}
                     </p>
                     <p>
                         这里我们使用二次方程的通项公式对四个方程直接进行求解，由于它们都有相同的形式，在此用下列方程代替
                     </p>
                     <p>
-                        \[ s^{2}-s*c+w_o^{2}=0 \]
+                        \[ s^{2}-s*c+w_c^{2}=0 \]
                     </p>
                     <p>
-                        \[ Root_0(c)=\frac{c+\sqrt{c^{2}-4w_o^{4}}}{2} \space\space\space\space
-                        Root_1(c)=\frac{c-\sqrt{c^{2}-4w_o^{2}}}{2} \]
+                        \[ Root_0(c)=\frac{c+\sqrt{c^{2}-4w_c^{4}}}{2} \space\space\space\space
+                        Root_1(c)=\frac{c-\sqrt{c^{2}-4w_c^{2}}}{2} \]
                     </p>
                     <p>通过一些小小的验证，我们足以发现以下关系</p>
                     <p>
                         \[ Root_0(c)与Root_0(\bar{c})是共轭复数，对Root_1也是如此 \]
                     </p>
                     <p>
-                        \[ 即Root_0(c)\xrightarrow[]{}\overline{Root_0(\bar{c})} \]
+                        \[ 即Root_0(c)的共轭复数是\overline{Root_0(\bar{c})} \]
                     </p>
                     <p>因此我们得到以下公式</p>
                     <p>
@@ -508,9 +504,6 @@
             std::vector&ltZPK> ProtyleToBandpass(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
                 double w = fcutoff * 2 * pi;
                 double bw = w / Q;
-                double w0 = w - bw / 2;
-                double w1 = w + bw / 2;
-                double wo = std::sqrt(w0 * w1);
                 std::vector&ltZPK> ret{protyle.size() * 2};
                 for (size_t i = 0; i < protyle.size(); ++i) {
                     ZPK s;
@@ -526,8 +519,8 @@
                     auto& bp1 = ret[2 * i];
                     auto& bp2 = ret[2 * i + 1];
                     if (s.z) {
-                        auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
-                        auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
+                        auto p_delta = std::sqrt(s.p * s.p - 4.0 * w * w);
+                        auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * w * w);
                         bp1.p = ScaleComplex(s.p + p_delta, 0.5);
                         bp2.p = ScaleComplex(s.p - p_delta, 0.5);
                         bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
@@ -536,7 +529,7 @@
                         bp2.k = std::sqrt(s.k);
                     }
                     else {
-                        auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+                        auto delta = std::sqrt(s.p * s.p - 4.0 * w * w);
                         bp1.p = ScaleComplex(s.p + delta, 0.5);
                         bp2.p = ScaleComplex(s.p - delta, 0.5);
                         bp1.z = 0;
@@ -559,17 +552,17 @@
                         <img src="bandpass/pzmap-cheb2.png" alt="pzmap-cheb2-bandpass">
                         <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
                         <img src="bandpass/bode-cheb2.png" alt="bode-cheb2-bandpass">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II振幅响应</p>
                 </div>
                 <div class="frame">
                     <h4>原型到带阻</h4>
                     <p>和带通类似，首先我们映射一个高通滤波器</p>
                     <p>
-                        \[s\xrightarrow[]{}\frac{w_{c}}{s}\]
+                        \[s\xleftarrow[]{}\frac{\frac{bw}{2}}{s}\]
                     </p>
                     <p>然后我们可以使用带通的结论将高通滤波器映射为带阻滤波器</p>
                     <p>
-                        \[s\xrightarrow[]{}\frac{s^{2}+w_{o}^2}{s}\]
+                        \[s\xleftarrow[]{}\frac{s^{2}+w_{c}^2}{s}\]
                     </p>
                     <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
                     <p>因此，我们可以写出以下代码</p>
@@ -578,9 +571,6 @@
             std::vector&ltZPK> ProtyleToBandstop(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
                 double w = fcutoff * 2 * pi;
                 double bw = w / Q;
-                double w0 = w - bw / 2;
-                double w1 = w + bw / 2;
-                double wo = std::sqrt(w0 * w1);
                 std::vector&ltZPK> ret{protyle.size() * 2};
                 for (size_t i = 0; i < protyle.size(); ++i) {
                     ZPK s;
@@ -599,8 +589,8 @@
                     auto& bp1 = ret[2 * i];
                     auto& bp2 = ret[2 * i + 1];
                     if (s.z) {
-                        auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
-                        auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
+                        auto p_delta = std::sqrt(s.p * s.p - 4.0 * w * w);
+                        auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * w * w);
                         bp1.p = ScaleComplex(s.p + p_delta, 0.5);
                         bp2.p = ScaleComplex(s.p - p_delta, 0.5);
                         bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
@@ -609,7 +599,7 @@
                         bp2.k = std::sqrt(s.k);
                     }
                     else {
-                        auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+                        auto delta = std::sqrt(s.p * s.p - 4.0 * w * w);
                         bp1.p = ScaleComplex(s.p + delta, 0.5);
                         bp2.p = ScaleComplex(s.p - delta, 0.5);
                         bp1.z = 0;
@@ -632,7 +622,7 @@
                         <img src="bandstop/pzmap-cheb2.png" alt="pzmap-cheb2-bandstop">
                         <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
                         <img src="bandstop/bode-cheb2.png" alt="bode-cheb2-bandstop">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
+                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II振幅响应</p>
                 </div>
             </div>
         </div>
