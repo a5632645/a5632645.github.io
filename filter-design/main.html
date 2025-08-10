@@ -303,6 +303,10 @@
                 <p class="centered">wikipedia的零极点计算</p>
                 <img src="cheb2-ripple.png" alt="cheb2-ripple">
                 <p class="centered">wikipedia的涟漪幅度计算，y是正数（如想要-40dB,y=40）</p>
+                <p>直接使用这些计算公式不会使得w=1rad/sec的位置为-3dB，可以计算出真正-3dB位置的频率</p>
+                <img src="cheb2-correct-freq.png" alt="cheb2-correct-freq">
+                <p class="centered">-3dB真正的位置</p>
+                <p>将w=1代入得到的fH即为正确位置，在连续域我们仅需缩放零点极点(乘以fH)即可纠正原型的频率</p>
                 <pre>
             <code>
             std::vector&ltZPK> Chebyshev2(int num_filter, double ripple) {
@@ -312,11 +316,12 @@
                 int i = 0;
                 double eps = 1.0 / std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0);
                 double A = 1.0 / n * std::asinh(1.0 / eps);
-                double k_re = std::sinh(A);
-                double k_im = std::cosh(A);
+                double scale = 1.0 / std::cosh(std::acosh(std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0)) / n);
+                double k_re = std::sinh(A) * scale;
+                double k_im = std::cosh(A) * scale;
                 for (int k = 1; k <= num_filter; ++k) {
                     double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
-                    ret[i].z = 1.0 / std::complex{0.0, std::cos(phi)};
+                    ret[i].z = 1.0 / std::complex{0.0, std::cos(phi) * scale};
                     ret[i].p = 1.0 / std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
                     ret[i].k = std::norm(ret[i].p) / std::norm(*ret[i].z);
                     ++i;
@@ -628,7 +633,7 @@
         </div>
     </div>
     <div>
-        write in 2025-8-2, update in 2025-8-3
+        write in 2025-8-2, update in 2025-8-10
     </div>
     <script src="../main.js"></script>
     <script src="../mulu.js"></script>
