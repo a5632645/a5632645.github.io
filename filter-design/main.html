@@ -453,9 +453,9 @@
                     <p>
                         \[Q=\frac{w_c}{bw} \xrightarrow[]{} bw=\frac{w_c}{Q} \]
                     </p>
-                    <p>第一步我们先映射一个截止频率位于bw/2的低通滤波器</p>
+                    <p>第一步我们先映射一个截止频率位于bw的低通滤波器</p>
                     <p>
-                        \[s\xleftarrow[]{}\frac{s}{\frac{bw}{2}}\]
+                        \[s\xleftarrow[]{}\frac{s}{bw}\]
                     </p>
                     <p>我们在上面已经推导了低通映射的ZPK，在此不重复。</p>
                     <p>第二部使用下面的映射函数将低通变为带通，中心频率为wc</p>
@@ -506,44 +506,46 @@
                     <p>由此写下以下代码</p>
                     <pre>
             <code>
-            std::vector&ltZPK> ProtyleToBandpass(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
-                double w = fcutoff * 2 * pi;
-                double bw = w / Q;
-                std::vector&ltZPK> ret{protyle.size() * 2};
-                for (size_t i = 0; i < protyle.size(); ++i) {
-                    ZPK s;
-                    {
-                        auto const& ss = protyle[i];
-                        s.k = ss.k * bw * bw / 4;
-                        s.p = ScaleComplex(ss.p, bw / 2);
-                        if (ss.z) {
-                            s.k = ss.k;
-                            s.z = ScaleComplex(*ss.z, bw / 2);
+                std::vector&ltZPK> ProtyleToBandpass(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
+                    double wo = fcutoff * 2 * pi;
+                    double bw = wo / Q;
+                    std::vector&ltZPK> ret{protyle.size() * 2};
+                    for (size_t i = 0; i < protyle.size(); ++i) {
+                        // prototype -> lowpass at bw
+                        ZPK s;
+                        {
+                            auto const& ss = protyle[i];
+                            s.k = ss.k * bw * bw;
+                            s.p = ScaleComplex(ss.p, bw);
+                            if (ss.z) {
+                                s.k = ss.k;
+                                s.z = ScaleComplex(*ss.z, bw);
+                            }
+                        }
+                        // lowpass -> bandpass
+                        auto& bp1 = ret[2 * i];
+                        auto& bp2 = ret[2 * i + 1];
+                        if (s.z) {
+                            auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+                            auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
+                            bp1.p = ScaleComplex(s.p + p_delta, 0.5);
+                            bp2.p = ScaleComplex(s.p - p_delta, 0.5);
+                            bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
+                            bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
+                            bp1.k = std::sqrt(s.k);
+                            bp2.k = std::sqrt(s.k);
+                        }
+                        else {
+                            auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+                            bp1.p = ScaleComplex(s.p + delta, 0.5);
+                            bp2.p = ScaleComplex(s.p - delta, 0.5);
+                            bp1.z = 0;
+                            bp1.k = std::sqrt(s.k);
+                            bp2.k = std::sqrt(s.k);
                         }
                     }
-                    auto& bp1 = ret[2 * i];
-                    auto& bp2 = ret[2 * i + 1];
-                    if (s.z) {
-                        auto p_delta = std::sqrt(s.p * s.p - 4.0 * w * w);
-                        auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * w * w);
-                        bp1.p = ScaleComplex(s.p + p_delta, 0.5);
-                        bp2.p = ScaleComplex(s.p - p_delta, 0.5);
-                        bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
-                        bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
-                        bp1.k = std::sqrt(s.k);
-                        bp2.k = std::sqrt(s.k);
-                    }
-                    else {
-                        auto delta = std::sqrt(s.p * s.p - 4.0 * w * w);
-                        bp1.p = ScaleComplex(s.p + delta, 0.5);
-                        bp2.p = ScaleComplex(s.p - delta, 0.5);
-                        bp1.z = 0;
-                        bp1.k = std::sqrt(s.k);
-                        bp2.k = std::sqrt(s.k);
-                    }
+                    return ret;
                 }
-                return ret;
-            }
             </code>
                         </pre>
                         <img src="bandpass/pzmap-butter.png" alt="pzmap-butter-bandpass">
@@ -563,7 +565,7 @@
                     <h4>原型到带阻</h4>
                     <p>和带通类似，首先我们映射一个高通滤波器</p>
                     <p>
-                        \[s\xleftarrow[]{}\frac{\frac{bw}{2}}{s}\]
+                        \[s\xleftarrow[]{}\frac{bw}{s}\]
                     </p>
                     <p>然后我们可以使用带通的结论将高通滤波器映射为带阻滤波器</p>
                     <p>
@@ -573,47 +575,49 @@
                     <p>因此，我们可以写出以下代码</p>
                     <pre>
             <code>
-            std::vector&ltZPK> ProtyleToBandstop(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
-                double w = fcutoff * 2 * pi;
-                double bw = w / Q;
-                std::vector&ltZPK> ret{protyle.size() * 2};
-                for (size_t i = 0; i < protyle.size(); ++i) {
-                    ZPK s;
-                    {
-                        auto const& ss = protyle[i];
-                        s.k = ss.k / std::norm(ss.p);
-                        s.p = bw * 0.5 / ss.p;
-                        if (ss.z) {
-                            s.k *= std::norm(*ss.z);
-                            s.z = bw * 0.5 / *ss.z;
+                std::vector&ltZPK> ProtyleToBandstop(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
+                    double wo = fcutoff * 2 * pi;
+                    double bw = wo / Q;
+                    std::vector&ltZPK> ret{protyle.size() * 2};
+                    for (size_t i = 0; i < protyle.size(); ++i) {
+                        // prototype -> highpass at bw
+                        ZPK s;
+                        {
+                            auto const& ss = protyle[i];
+                            s.k = ss.k / std::norm(ss.p);
+                            s.p = bw / ss.p;
+                            if (ss.z) {
+                                s.k *= std::norm(*ss.z);
+                                s.z = bw / *ss.z;
+                            }
+                            else {
+                                s.z = 0;
+                            }
+                        }
+                        // highpass -> bandstop
+                        auto& bp1 = ret[2 * i];
+                        auto& bp2 = ret[2 * i + 1];
+                        if (s.z) {
+                            auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+                            auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
+                            bp1.p = ScaleComplex(s.p + p_delta, 0.5);
+                            bp2.p = ScaleComplex(s.p - p_delta, 0.5);
+                            bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
+                            bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
+                            bp1.k = std::sqrt(s.k);
+                            bp2.k = std::sqrt(s.k);
                         }
                         else {
-                            s.z = 0;
+                            auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+                            bp1.p = ScaleComplex(s.p + delta, 0.5);
+                            bp2.p = ScaleComplex(s.p - delta, 0.5);
+                            bp1.z = 0;
+                            bp1.k = std::sqrt(s.k);
+                            bp2.k = std::sqrt(s.k);
                         }
                     }
-                    auto& bp1 = ret[2 * i];
-                    auto& bp2 = ret[2 * i + 1];
-                    if (s.z) {
-                        auto p_delta = std::sqrt(s.p * s.p - 4.0 * w * w);
-                        auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * w * w);
-                        bp1.p = ScaleComplex(s.p + p_delta, 0.5);
-                        bp2.p = ScaleComplex(s.p - p_delta, 0.5);
-                        bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
-                        bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
-                        bp1.k = std::sqrt(s.k);
-                        bp2.k = std::sqrt(s.k);
-                    }
-                    else {
-                        auto delta = std::sqrt(s.p * s.p - 4.0 * w * w);
-                        bp1.p = ScaleComplex(s.p + delta, 0.5);
-                        bp2.p = ScaleComplex(s.p - delta, 0.5);
-                        bp1.z = 0;
-                        bp1.k = std::sqrt(s.k);
-                        bp2.k = std::sqrt(s.k);
-                    }
+                    return ret;
                 }
-                return ret;
-            }
             </code>
                         </pre>
                         <img src="bandstop/pzmap-butter.png" alt="pzmap-butter-bandstop">
@@ -633,7 +637,7 @@
         </div>
     </div>
     <div>
-        write in 2025-8-2, update in 2025-8-10
+        write in 2025-8-2, update in 2025-8-11
     </div>
     <script src="../main.js"></script>
     <script src="../mulu.js"></script>
