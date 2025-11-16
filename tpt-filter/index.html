@@ -25,8 +25,9 @@
         <code>
             float TickTrapezoidalIntegrator(float x, float w) {
                 float g = tan(w / 2);
+                x *= g;
                 float y = s_ + x;
-                s_ = y + g * x;
+                s_ = y + x;
                 return y;
             }
         </code>
@@ -35,28 +36,26 @@
     <h2>TPT 1 pole Lowpass</h3>
     <img src="./1pole.png" alt="image">
     <p>we have</p>
-    <p>\[yLP=gE+s\]</p>
-    <p>\[E=x-y\]</p>
+    <p>\[yLP=g*yHP+s\]</p>
+    <p>\[yHP=x-yLP\]</p>
     <p>so</p>
-    <p>\[E=\frac{x-s}{1+g}\]</p>
+    <p>\[yHP=\frac{1}{1+g}(x-s)\]</p>
     <p>\[yLP=\frac{g}{1+g}x+\frac{1}{1+g}s\]</p>
-    <p>\[yHP=x-yLP=\frac{1}{1+g}(x-s)\]</p>
     <img src="./1pole-tpt.png" alt="1pole-tpt">
     <pre>
         <code>
             float TickTptLP(float x, float w) {
                 // lowpass
                 float g = std::tan(w / 2);
-                float E = (x - s) / (1 + g);
-                float v = g * E;
+                // highpass
+                float yHP = (x - s) / (1 + g);
+                float v = g * yHP;
                 // float gLP = g / (1 + g);
                 // float const v = gLP * (x - s_);
                 s_ += v;
-                float const y = s_;
+                float yLP = s_;
                 s_ += v;
-                return y;
-                // highpass
-                // return x -y;
+                return yLP;
             }
         </code>
     </pre>
@@ -77,7 +76,7 @@
                 float g = tan(w / 2);
                 float R2 = 1 / Q;
 
-                float yHP = (x - (R2 + g) * s1_ - s2_);
+                float yHP = (x - (R2 + g) * s1_ - s2_) / (1 + R2 * g + g * g);
                 float yBP = yHP * g + s1_;
                 s1_ = g * yHP + yBP;
                 float yLP = yBP * g + s2_;
@@ -174,7 +173,7 @@
     <p>\[LP1=\frac{g}{1+g}u+\frac{1}{1+g}s1\]</p>
     <p>\[HP2=\frac{1}{1+g}(LP1-s2)\]</p>
     <p>so</p>
-    <p>\[u=\frac{g^2x-gks2+2gx+ks1-ks2+x}{1+2g+g^2-gk}\]</p>
+    <p>\[u=\frac{x(1+g)^2-(1+g)ks2+ks1}{(1+g)^2-gk}\]</p>
     <pre>
         <code>
             // k [0,2]
@@ -185,10 +184,11 @@
                     float hp2;
                 } output;
 
-                float g_ = tan(w / 2);
+                float g = tan(w / 2);
+                float G = (1 + g);
 
-                float u = g_ * g_ * x - g_ * k_ * s2_ + 2 * g_ * x + k_ * (s1_ - s2_) + x;
-                u /= (g_ * g_ - g_ * k_ + 2 * g_ + 1);
+                float u = x * G * G - G * k * s2_ + k * s1_;
+                u /= (G * G - g * k);
                 float lp1 = TickTptLP(u, s1_, glp_);
                 float hp1 = u - lp1;
                 output.lp2 = TickTptLP(lp1, s2_, glp_);
