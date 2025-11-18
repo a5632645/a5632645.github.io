@@ -13,13 +13,11 @@
     <!-- math -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
-<body onload="setInterval(() => {
-    // window.scrollTo(0, document.body.scrollHeight);
-}, 1000); ">
+<body>
     <a href="../index.html">back</a>
     <hr>
 
-    <h2>TPT 积分器</h3>
+    <h2>TPT 积分器</h2>
     <img src="./tpt.png" alt="tpt">
     <pre>
         <code>
@@ -33,7 +31,7 @@
         </code>
     </pre>
 
-    <h2>TPT 1 pole Lowpass</h3>
+    <h2>TPT 1 pole Lowpass</h2>
     <img src="./1pole.png" alt="image">
     <p>we have</p>
     <p>\[yLP=g*yHP+s\]</p>
@@ -60,7 +58,7 @@
         </code>
     </pre>
 
-    <h2>TPT SVF</h3>
+    <h2>TPT SVF</h2>
     <img src="svf-analog.png" alt="svf-analog">
     <p>we have</p>
     <p>\[yHP=x-2R*yBP-yLP\]</p>
@@ -199,5 +197,155 @@
             }
         </code>
     </pre>
+
+    <h2>4 pole ladder bandpass</h2>
+    <img src="ladder-4pole-bp.png" alt="ladder-4pole-bp">
+    <p>让我们使用SVF来实现</p>
+    <p>\[yBPN=\frac{g(Rx-s2)+s1}{1+2Rg+g^2}\]</p>
+    <p class="frame">你注意到上面的BPN只是x * R了吗，我们把后面的0.5给合并到2R里面去了</p>
+    <p>we have</p>
+    <p>\[u=x+k*BP2\]</p>
+    <p>\[B=\frac{1}{1+2Rg+g^2}\]</p>
+    <p>\[BP1=B(g(Ru-s2)+s1)\]</p>
+    <p>\[BP2=B(g(R*BP1-s4)+s3)\]</p>
+    <p>so</p>
+    <p>\[u=\frac{B^2Rgk(gs2-s1)+Bk(gs4-s3)-x}{B^2R^2g^2k-1}\]</p>
+    <pre>
+        <code>
+            static float TickHalfNormBandpass(float x, float g, float& s1, float& s2, float B) noexcept {
+                float bp = B * (g * (x - s2) + s1);
+                float bp2 = bp + bp;
+                s1 = bp2 - s1;
+                float v22 = g * bp2;
+                s2 += v22;
+                return bp;
+            }
+
+            // k [0,16(may be 4)]
+            // R > 0
+            auto TickTrueBandpass(float x, float w, float R, float k) noexcept {
+                struct Output {
+                    float BPn1;
+                    float BPn2;
+                } output;
+
+                float g = tan(w / 2);
+                float B = 1 / (1 + 2 * R * g + g * g);
+                float u = B * B * R * g * k * (g * s2_ - s1_) + B * k * (g * s4_ - s3_) - x;
+                u /= (B * B * R * R * g * g * k - 1);
+
+                output.BPn1 = TickHalfNormBandpass(u * R, g, s1_, s2_, B);
+                output.BPn2 = TickHalfNormBandpass(output.BPn1 * R, g, s3_, s4_, B);
+
+                return output;
+            }
+        </code>
+    </pre>
+
+    <h2>8 pole ladder lowpass</h2>
+    <img src="ladder-8pole-lp.png" alt="ladder-8pole-lp">
+    <p>we have</p>
+    <p>\[LP[n]=\frac{g}{1+g}E+\frac{1}{1+g}s=A*E+B*s[n]\]</p>
+    <p>\[u=x-k*LP8\]</p>
+    <p>\[LP1=Au+B*s1\]</p>
+    <p>\[LP2=A*LP1+B*s2\]</p>
+    <p>\[LP3=A*LP2+B*s3\]</p>
+    <p>\[LP4=A*LP3+B*s4\]</p>
+    <p>\[LP5=A*LP4+B*s5\]</p>
+    <p>\[LP6=A*LP5+B*s6\]</p>
+    <p>\[LP7=A*LP6+B*s7\]</p>
+    <p>\[LP8=A*LP7+B*s8\]</p>
+    <p>so</p>
+    <p>\[u=\frac{x-Bk(s8+A(s7+A(s6+A(s5+A(s4+A(s3+A(s2+As1)))))))}{1+kA^8}\]</p>
+    <pre>
+        <code>
+            /**
+            * @param k [0,1.884]
+            */
+            void Set(float w, float k) noexcept {
+                g_ = std::tan(w / 2) * (1 + std::numbers::sqrt2_v<float>);
+                k_ = k;
+            }
+            
+            auto Tick(float x) noexcept {
+                struct Output {
+                    float lp1;
+                    float lp2;
+                    float lp3;
+                    float lp4;
+                    float lp5;
+                    float lp6;
+                    float lp7;
+                    float lp8;
+                } output;
+
+                float B = 1 / (1 + g_);
+                float A = g_ * B;
+                float S = s_[7] + A * (s_[6] + A * (s_[5] + A * (s_[4] + A * (s_[3] + A * (s_[2] + A * (s_[1] + A * s_[0]))))));
+                float u = x - B * k_ * S;
+                u /= (1 + k_ * A * A * A * A * A * A * A * A);
+
+                output.lp1 = TickLpTPT(u, s_[0], A);
+                output.lp2 = TickLpTPT(output.lp1, s_[1], A);
+                output.lp3 = TickLpTPT(output.lp2, s_[2], A);
+                output.lp4 = TickLpTPT(output.lp3, s_[3], A);
+                output.lp5 = TickLpTPT(output.lp4, s_[4], A);
+                output.lp6 = TickLpTPT(output.lp5, s_[5], A);
+                output.lp7 = TickLpTPT(output.lp6, s_[6], A);
+                output.lp8 = TickLpTPT(output.lp7, s_[7], A);
+
+                return output;
+            }
+        </code>
+    </pre>
+
+    <h2>OTA 1 pole</h2>
+    <img src="ota-1pole.png" alt="ota-1pole">
+    <p>为了简便使用以下非线性函数</p>
+    <p>tanh -><span>\[x/(1+|x|)\]</span></p>
+    <p>we have</p>
+    <p>\[u=x-g\frac{u}{1+|u|}-s\]</p>
+    <p>so</p>
+    <b>u>0</b>
+    <p>\[u=x-\frac{gu}{1+u}-s\]</p>
+    <p>\[\frac{gu}{1+u}=-u+(x-s)\]</p>
+    <p>\[u=\frac{1}{2}((-1-g-s+x)+\sqrt{4(x-s)+(-1-g-s+x)^2})\]</p>
+    <b>u<0</b>
+    <p>\[u=x-\frac{gu}{1-u}-s\]</p>
+    <p>\[\frac{gu}{1-u}=-u+(x-s)\]</p>
+    <p>\[u=\frac{1}{2}(1+g-s+x-\sqrt{4(s-x)+(1+g-s+x)^2})\]</p>
+    <pre>
+        <code>
+            float TickOTALp(float x, float w) {
+                float bias = x - s_;
+                float g = tan(w / 2);
+                float u = 0;
+                if (bias > 0) {
+                    // u > 0
+                    float t = -1 - g - s_ + x;
+                    u = t + std::sqrt(4*(x-s_)+t*t);
+                }
+                else {
+                    // u < 0
+                    float t = 1 + g - s_ + x;
+                    u = t - std::sqrt(4*(s_-x)+t*t);
+                }
+                u /= 2;
+
+                u = u / (1 + std::abs(u));
+                u *= g;
+                s_ += u;
+                float y = s_;
+                s_ += u;
+
+                return y;
+            }
+        </code>
+    </pre>
+    <script>
+        document.onload = setInterval(() => {
+            // window.scrollTo(0, document.body.scrollHeight);
+        }, 1000);
+    </script>
 </body>
 </html>
