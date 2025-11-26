@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>另一种频率响应计算</title>
+
+    <link rel="stylesheet" href="../main.css">
+    <!-- code -->
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <!-- math -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <div>
+        <a href="../index.html">back</a>
+        <b>另一种频率响应计算</b>
+        <hr>
+    </div>
+
+    <div style="background-color: rgb(255, 255, 255);">
+        <p style="display: block;">这种计算方式需要双线性变换的滤波器才能使用，如果是Match biquad则需要使用正规biquad计算方式</p>
+        <p style="display: block;">你可以提前预留tan(wc/2)，因为RBJ设计过程会使用到这个变量</p>
+        <p style="display: block;">另外的tan(exp(log_w)/2)可以通过打表的形式记录，或者将它使用数学软件进行多项式拟合</p>
+    </div>
+    <hr>
+
+    <script>
+        function setupFilterPlot(containerId, initialWc, filterResponceFunction) {
+            const container = document.getElementById(containerId);
+            if (!container) {
+                console.error(`Container ID "${containerId}" not found.`);
+                return;
+            }
+
+            const controlDiv = document.createElement('div');
+            container.appendChild(controlDiv);
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.name = 'wc';
+            slider.id = containerId +'wc_slider';
+            slider.min = "0"; 
+            slider.max = "1";
+            slider.step = "0.001";
+            slider.value = initialWc;
+            controlDiv.appendChild(slider);
+
+            const label = document.createElement('label');
+            label.htmlFor = containerId + 'wc_slider';
+            label.textContent = `wc: ${initialWc}`;
+            controlDiv.appendChild(label);
+
+            const canvas = document.createElement('canvas');
+            canvas.id = containerId + 'filter_canvas';
+            const width = 400;
+            const height = 300;
+            canvas.width = width;
+            canvas.height = height;
+            canvas.style.border = '1px black solid';
+            container.appendChild(canvas);
+
+            const ctx = canvas.getContext("2d");
+
+            const MIN_DB = -60;
+            const MAX_DB = 10;
+            const MIN_GAIN = Math.pow(10, MIN_DB / 20);
+            
+            const W_MIN = 0.00001;
+            const W_MAX = Math.PI - 0.01;
+            const LOG_W_BEGIN = Math.log(W_MIN);
+            const LOG_W_END = Math.log(W_MAX);
+
+            function drawResponse() {
+                const sliderValue = parseFloat(slider.value);
+                const log_wc = LOG_W_BEGIN + sliderValue * (LOG_W_END - LOG_W_BEGIN);
+                const wc = Math.exp(log_wc);
+                
+                label.textContent = `wc: ${wc}`;
+
+                ctx.clearRect(0, 0, width, height);
+                ctx.beginPath();
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 2;
+                
+                let first_point = true;
+                
+                for (let i = 0; i < width; ++i) {
+                    const norm = i / width;
+                    const log_w = LOG_W_BEGIN + norm * (LOG_W_END - LOG_W_BEGIN);
+                    const w = Math.exp(log_w);
+                    const g = filterResponceFunction(wc, w);
+
+                    let db = MIN_DB;
+                    if (g > MIN_GAIN) {
+                        db = 20 * Math.log10(g);
+                    }
+
+                    const x = i;
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
+                    
+                    if (first_point) {
+                        ctx.moveTo(x, y);
+                        first_point = false;
+                    }
+                    else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+            
+            slider.addEventListener('input', drawResponse);
+            drawResponse();
+        }
+    </script>
+    <script>
+        function setupFilterPlotQ(containerId, initialWc, initQ, filterResponceFunction1, filterResponceFunction2) {
+            const container = document.getElementById(containerId);
+            if (!container) {
+                console.error(`Container ID "${containerId}" not found.`);
+                return;
+            }
+
+            const controlDiv = document.createElement('div');
+            container.appendChild(controlDiv);
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.name = 'wc';
+            slider.id = containerId + 'wc_slider';
+            slider.min = "0"; 
+            slider.max = "1";
+            slider.step = "0.001";
+            slider.value = initialWc;
+            controlDiv.appendChild(slider);
+
+            const label = document.createElement('label');
+            label.htmlFor = containerId + 'wc_slider';
+            label.textContent = `wc: ${initialWc}`;
+            controlDiv.appendChild(label);
+
+            const sliderQ = document.createElement('input');
+            sliderQ.type = 'range';
+            sliderQ.name = 'Q';
+            sliderQ.id = containerId + 'Q_slider';
+            sliderQ.min = "0.1"; 
+            sliderQ.max = "10";
+            sliderQ.step = "0.1";
+            sliderQ.value = initQ;
+            controlDiv.appendChild(sliderQ);
+
+            const labelQ = document.createElement('label');
+            labelQ.htmlFor = containerId + 'Q_slider';
+            labelQ.textContent = `wc: ${initQ}`;
+            controlDiv.appendChild(labelQ);
+
+            const canvas = document.createElement('canvas');
+            canvas.id = containerId + 'filter_canvas';
+            const width = 400;
+            const height = 300;
+            canvas.width = width;
+            canvas.height = height;
+            canvas.style.border = '1px black solid';
+            container.appendChild(canvas);
+
+            const ctx = canvas.getContext("2d");
+
+            const MIN_DB = -60;
+            const MAX_DB = 30;
+            const MIN_GAIN = Math.pow(10, MIN_DB / 20);
+            
+            const W_MIN = 0.00001;
+            const W_MAX = Math.PI - 0.01;
+            const LOG_W_BEGIN = Math.log(W_MIN);
+            const LOG_W_END = Math.log(W_MAX);
+
+            function drawResponse() {
+                const sliderValue = parseFloat(slider.value);
+                const log_wc = LOG_W_BEGIN + sliderValue * (LOG_W_END - LOG_W_BEGIN);
+                const wc = Math.exp(log_wc);
+                const Q = parseFloat(sliderQ.value);
+                
+                label.textContent = `wc: ${wc}`;
+                labelQ.textContent = `Q: ${Q}`;
+
+                ctx.clearRect(0, 0, width, height);
+                ctx.beginPath();
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 2;
+                let first_point = true;
+                for (let i = 0; i < width; ++i) {
+                    const norm = i / width;
+                    const log_w = LOG_W_BEGIN + norm * (LOG_W_END - LOG_W_BEGIN);
+                    const w = Math.exp(log_w);
+                    const g = filterResponceFunction1(wc, Q, w);
+
+                    let db = MIN_DB;
+                    if (g > MIN_GAIN) {
+                        db = 20 * Math.log10(g);
+                    }
+
+                    const x = i;
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
+                    
+                    if (first_point) {
+                        ctx.moveTo(x, y);
+                        first_point = false;
+                    }
+                    else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 4;
+                let t = ctx.save();
+                ctx.setLineDash([4, 4]);
+                first_point = true;
+                for (let i = 0; i < width; ++i) {
+                    const norm = i / width;
+                    const log_w = LOG_W_BEGIN + norm * (LOG_W_END - LOG_W_BEGIN);
+                    const w = Math.exp(log_w);
+                    const g = filterResponceFunction2(wc, Q, w);
+
+                    let db = MIN_DB;
+                    if (g > MIN_GAIN) {
+                        db = 20 * Math.log10(g);
+                    }
+
+                    const x = i;
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
+                    
+                    if (first_point) {
+                        ctx.moveTo(x, y);
+                        first_point = false;
+                    }
+                    else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                ctx.restore(t);
+
+                ctx.font = '24px Arial';
+                ctx.fillStyle = 'blue';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'top';
+                ctx.fillText('BilinearAnalog', width, 0);
+                ctx.fillStyle = 'red';
+                ctx.fillText('Biquad', width, 24);
+            }
+            
+            slider.addEventListener('input', drawResponse);
+            sliderQ.addEventListener('input', drawResponse);
+            drawResponse();
+        }
+    </script>
+    <script>
+        function setupFilterPlotQDb(containerId, initialWc, initQ, initDb, filterResponceFunction1, filterResponceFunction2) {
+            const container = document.getElementById(containerId);
+            if (!container) {
+                console.error(`Container ID "${containerId}" not found.`);
+                return;
+            }
+
+            const controlDiv = document.createElement('div');
+            container.appendChild(controlDiv);
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.name = 'wc';
+            slider.id = containerId + 'wc_slider';
+            slider.min = "0"; 
+            slider.max = "1";
+            slider.step = "0.001";
+            slider.value = initialWc;
+            controlDiv.appendChild(slider);
+
+            const label = document.createElement('label');
+            label.htmlFor = containerId + 'wc_slider';
+            label.textContent = `wc: ${initialWc}`;
+            controlDiv.appendChild(label);
+
+            const sliderQ = document.createElement('input');
+            sliderQ.type = 'range';
+            sliderQ.name = 'Q';
+            sliderQ.id = containerId + 'Q_slider';
+            sliderQ.min = "0.1"; 
+            sliderQ.max = "10";
+            sliderQ.step = "0.1";
+            sliderQ.value = initQ;
+            controlDiv.appendChild(sliderQ);
+
+            const labelQ = document.createElement('label');
+            labelQ.htmlFor = containerId + 'Q_slider';
+            labelQ.textContent = `wc: ${initQ}`;
+            controlDiv.appendChild(labelQ);
+
+            const sliderDb = document.createElement('input');
+            sliderDb.type = 'range';
+            sliderDb.name = 'db';
+            sliderDb.id = containerId + 'db_slider';
+            sliderDb.min = "-20"; 
+            sliderDb.max = "20";
+            sliderDb.step = "0.1";
+            sliderDb.value = initDb;
+            controlDiv.appendChild(sliderDb);
+
+            const labelDb = document.createElement('label');
+            labelDb.htmlFor = containerId + 'db_slider';
+            labelDb.textContent = `wc: ${initDb}`;
+            controlDiv.appendChild(labelDb);
+
+            const canvas = document.createElement('canvas');
+            canvas.id = containerId + 'filter_canvas';
+            const width = 400;
+            const height = 300;
+            canvas.width = width;
+            canvas.height = height;
+            canvas.style.border = '1px black solid';
+            container.appendChild(canvas);
+
+            const ctx = canvas.getContext("2d");
+
+            const MIN_DB = -60;
+            const MAX_DB = 30;
+            const MIN_GAIN = Math.pow(10, MIN_DB / 20);
+            
+            const W_MIN = 0.00001;
+            const W_MAX = Math.PI - 0.01;
+            const LOG_W_BEGIN = Math.log(W_MIN);
+            const LOG_W_END = Math.log(W_MAX);
+
+            function drawResponse() {
+                const sliderValue = parseFloat(slider.value);
+                const log_wc = LOG_W_BEGIN + sliderValue * (LOG_W_END - LOG_W_BEGIN);
+                const wc = Math.exp(log_wc);
+                const Q = parseFloat(sliderQ.value);
+                const dbf = parseFloat(sliderDb.value);
+                
+                label.textContent = `wc: ${wc}`;
+                labelQ.textContent = `Q: ${Q}`;
+                labelDb.textContent = `db: ${dbf}`;
+
+                ctx.clearRect(0, 0, width, height);
+                ctx.beginPath();
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 2;
+                let first_point = true;
+                for (let i = 0; i < width; ++i) {
+                    const norm = i / width;
+                    const log_w = LOG_W_BEGIN + norm * (LOG_W_END - LOG_W_BEGIN);
+                    const w = Math.exp(log_w);
+                    const g = filterResponceFunction1(wc, Q, dbf, w);
+
+                    let db = MIN_DB;
+                    if (g > MIN_GAIN) {
+                        db = 20 * Math.log10(g);
+                    }
+
+                    const x = i;
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
+                    
+                    if (first_point) {
+                        ctx.moveTo(x, y);
+                        first_point = false;
+                    }
+                    else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 4;
+                let t = ctx.save();
+                ctx.setLineDash([4, 4]);
+                first_point = true;
+                for (let i = 0; i < width; ++i) {
+                    const norm = i / width;
+                    const log_w = LOG_W_BEGIN + norm * (LOG_W_END - LOG_W_BEGIN);
+                    const w = Math.exp(log_w);
+                    const g = filterResponceFunction2(wc, Q, dbf, w);
+
+                    let db = MIN_DB;
+                    if (g > MIN_GAIN) {
+                        db = 20 * Math.log10(g);
+                    }
+
+                    const x = i;
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
+                    
+                    if (first_point) {
+                        ctx.moveTo(x, y);
+                        first_point = false;
+                    }
+                    else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+                ctx.restore(t);
+
+                ctx.font = '24px Arial';
+                ctx.fillStyle = 'blue';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'top';
+                ctx.fillText('BilinearAnalog', width, 0);
+                ctx.fillStyle = 'red';
+                ctx.fillText('Biquad', width, 24);
+            }
+            
+            slider.addEventListener('input', drawResponse);
+            sliderQ.addEventListener('input', drawResponse);
+            sliderDb.addEventListener('input', drawResponse);
+            drawResponse();
+        }
+    </script>
+
+    首先以一个单极点biliinear低通滤波器为例子，可以用RBJ设计
+    <pre>
+        <code>
+void Biquad_MakeLpf6(Biquad_t* b, float w) {
+    float k = tanf(w / 2);
+    b->b0 = k / (1 + k);
+    b->b1 = b->b0;
+    b->b2 = 0;
+    b->a1 = (k - 1) / (k + 1);
+    b->a2 = 0;
+}
+        </code>
+    </pre>
+    <p>\[H(z)=\frac{b0z+b1}{z+a0}\]</p>
+    通常我会使用<span>\[z=e^{iw}\]</span>带入进行计算
+    <div id="filter1"></div>
+    <script>
+        setupFilterPlot('filter1', 0.5, (wc, w)=>{
+            let k = Math.tan(wc / 2);
+            let b0 = k / (1 + k);
+            let b1 = b0;
+            let a1 = (k - 1) / (k + 1);
+
+            let re = Math.cos(w);
+            let im = Math.sin(w);
+            let re2 = re * re - im * im;
+            let im2 = 2 * re * im;
+
+            let up_re = re * b0 + b1;
+            let up_im = im * b0;
+            let down_re = 1 + a1 * re;
+            let down_im = a1 * im;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        });
+    </script>
+    <hr>
+    
+    我们可以使用双线性变换的频率映射使用模拟滤波器响应来移除多余的三角函数计算
+    <p>\[wanalog=tan(wdigital/2)\]</p>
+    一个模拟单极点低通滤波器是
+    <p>\[H(s)=\frac{wc}{s+wc}\]</p>
+    <p>\[s=iw\]</p>
+    <div id="filter2"></div>
+    <script>
+        setupFilterPlot('filter2', 0.5, (wc, w)=>{
+            let k = Math.tan(wc / 2);
+            let w_analog = Math.tan(w / 2);
+            let wc_analog = k;
+
+            let up_re = wc_analog;
+            let up_im = 0;
+            let down_re = wc_analog;
+            let down_im = w_analog;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        });
+    </script>
+    <hr>
+
+    a bilinear lowpass analog
+    <p>\[H(s)=\frac{1}{s^2+\frac{s}{Q}+1}\]</p>
+    we can use
+    <p>\[s=\frac{s}{wc}\]</p>
+    <div id="filter3"></div>
+    <script>
+        setupFilterPlotQ('filter3', 0.5, 0.5,
+        (wc, Q, w)=>{
+            let wc_analog = Math.tan(wc / 2);
+            let w_analog = Math.tan(w / 2);
+            let s_im = w_analog / wc_analog;
+
+            let up_re = 1;
+            let up_im = 0;
+            let down_re = 1 - s_im * s_im;
+            let down_im = s_im / Q;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        }, (wc, Q, w)=>{
+            let a = Math.sin(wc) / (2 * Q);
+            let cosw = Math.cos(wc);
+            let b0 = (1 - cosw) / 2;
+            let b1 = 1 - cosw;
+            let b2 = b0;
+            let a1 = -2 * cosw;
+            let a2 = 1 - a;
+            let inva0 = 1 / (1 + a);
+            b0 *= inva0;
+            b1 *= inva0;
+            b2 *= inva0;
+            a1 *= inva0;
+            a2 *= inva0;
+
+            let re = Math.cos(w);
+            let im = Math.sin(w);
+            let re2 = re * re - im * im;
+            let im2 = 2 * re * im;
+
+            let up_re = b0 * re2 + b1 * re + b2;
+            let up_im = b0 * im2 + b1 * im;
+            let down_re = re2 + a1 * re + a2;
+            let down_im = im2 + a1 * im;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        });
+    </script>
+    <hr>
+    
+    a bilinear highpass analog
+    <p>\[H(s)=\frac{s^2}{s^2+\frac{s}{Q}+1}\]</p>
+    <div id="filter4"></div>
+    <script>
+        setupFilterPlotQ('filter4', 0.5, 0.5,
+        (wc, Q, w) => {
+            let wc_analog = Math.tan(wc / 2);
+            let w_analog = Math.tan(w / 2);
+            let s_im = w_analog / wc_analog;
+
+            let up_re = -s_im * s_im;
+            let up_im = 0;
+            let down_re = 1 - s_im * s_im;
+            let down_im = s_im / Q;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        },
+        (wc, Q, w) => {
+            let a = Math.sin(wc) / (2 * Q);
+            let cosw = Math.cos(wc);
+            let b0 = (1 + cosw) / 2;
+            let b1 = -(1 + cosw);
+            let b2 = b0;
+            let a1 = -2 * cosw;
+            let a2 = 1 - a;
+            let inva0 = 1 / (1 + a);
+            b0 *= inva0;
+            b1 *= inva0;
+            b2 *= inva0;
+            a1 *= inva0;
+            a2 *= inva0;
+
+            let re = Math.cos(w);
+            let im = Math.sin(w);
+            let re2 = re * re - im * im;
+            let im2 = 2 * re * im;
+
+            let up_re = b0 * re2 + b1 * re + b2;
+            let up_im = b0 * im2 + b1 * im;
+            let down_re = re2 + a1 * re + a2;
+            let down_im = im2 + a1 * im;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        }
+        );
+    </script>
+    <hr>
+
+    a bilinear highpass one pole analog
+    <p>\[H(s)=\frac{s}{s+1}\]</p>
+    <div id="filter5"></div>
+    <script>
+        setupFilterPlotQ('filter5', 0.5, 0.5,
+        (wc, Q, w) => {
+            let wc_analog = Math.tan(wc / 2);
+            let w_analog = Math.tan(w / 2);
+            let s_im = w_analog / wc_analog;
+
+            let up_re = 0;
+            let up_im = s_im;
+            let down_re = 1;
+            let down_im = s_im;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        },
+        (wc, Q, w) => {
+            let k = Math.tan(wc / 2);
+            let b0 = 1 / (1 + k);
+            let b1 = -b0;
+            let b2 = 0;
+            let a1 = (k - 1) / (k + 1);
+            let a2 = 0;
+
+            let re = Math.cos(w);
+            let im = Math.sin(w);
+            let re2 = re * re - im * im;
+            let im2 = 2 * re * im;
+
+            let up_re = b0 * re2 + b1 * re + b2;
+            let up_im = b0 * im2 + b1 * im;
+            let down_re = re2 + a1 * re + a2;
+            let down_im = im2 + a1 * im;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        }
+        );
+    </script>
+    <hr>
+
+    a bilinear bandpass
+    <p>\[H(s)=\frac{s}{s^2+\frac{s}{Q}+1}\]</p>
+    <div id="filter6"></div>
+    <script>
+        setupFilterPlotQ('filter6', 0.5, 0.5,
+        (wc, Q, w) => {
+            let wc_analog = Math.tan(wc / 2);
+            let w_analog = Math.tan(w / 2);
+            let s_im = w_analog / wc_analog;
+
+            let up_re = 0;
+            let up_im = s_im;
+            let down_re = 1 - s_im * s_im;
+            let down_im = s_im / Q;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        },
+        (wc, Q, w) => {
+            let a = Math.sin(wc) / (2 * Q);
+            let cosw = Math.cos(wc);
+            let b0 = Q * a;
+            let b1 = 0;
+            let b2 = -b0;
+            let a1 = -2 * cosw;
+            let a2 = 1 - a;
+            let inva0 = 1 / (1 + a);
+            b0 *= inva0;
+            b1 *= inva0;
+            b2 *= inva0;
+            a1 *= inva0;
+            a2 *= inva0;
+
+            let re = Math.cos(w);
+            let im = Math.sin(w);
+            let re2 = re * re - im * im;
+            let im2 = 2 * re * im;
+
+            let up_re = b0 * re2 + b1 * re + b2;
+            let up_im = b0 * im2 + b1 * im;
+            let down_re = re2 + a1 * re + a2;
+            let down_im = im2 + a1 * im;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        }
+        );
+    </script>
+    <hr>
+
+    a bilinear peak
+    <p>\[H(s)=\frac{s}{s^2+\frac{s}{Q}+1}\]</p>
+    <div id="filter7"></div>
+    <script>
+        setupFilterPlotQDb('filter7', 0.5, 0.5, 10,
+        (wc, Q, db, w) => {
+            let A = Math.pow(10, db / 40);
+            let wc_analog = Math.tan(wc / 2);
+            let w_analog = Math.tan(w / 2);
+            let s_im = w_analog / wc_analog;
+
+            let up_re = 1 - s_im * s_im;
+            let up_im = s_im * A / Q;
+            let down_re = 1 - s_im * s_im;
+            let down_im = s_im / Q / A;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        },
+        (wc, Q, db, w) => {
+            let a = Math.sin(wc) / (2 * Q);
+            let cosw = Math.cos(wc);
+            let A = Math.pow(10, db / 40);
+            let b0 = 1 + a * A;
+            let b1 = -2 * cosw;
+            let b2 = 1 - a * A;
+            let a1 = -2 * cosw;
+            let a2 = 1 - a / A;
+            let inva0 = 1 / (1 + a / A);
+            b0 *= inva0;
+            b1 *= inva0;
+            b2 *= inva0;
+            a1 *= inva0;
+            a2 *= inva0;
+
+            let re = Math.cos(w);
+            let im = Math.sin(w);
+            let re2 = re * re - im * im;
+            let im2 = 2 * re * im;
+
+            let up_re = b0 * re2 + b1 * re + b2;
+            let up_im = b0 * im2 + b1 * im;
+            let down_re = re2 + a1 * re + a2;
+            let down_im = im2 + a1 * im;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        }
+        );
+    </script>
+    <hr>
+
+    a bilinear lowshelf
+    <p>\[H(s)=A\frac{s^2+\frac{\sqrt{A}}{Q}s+A}{As^2+\frac{\sqrt{A}}{Q}s+1}\]</p>
+    <div id="filter8"></div>
+    <script>
+        setupFilterPlotQDb('filter8', 0.5, 0.5, 10,
+        (wc, Q, db, w) => {
+            let sqrt_A = Math.pow(10, db / 80);
+            let A = sqrt_A * sqrt_A;
+            let wc_analog = Math.tan(wc / 2);
+            let w_analog = Math.tan(w / 2);
+            let s_im = w_analog / wc_analog;
+
+            let up_re = A * (A - s_im * s_im);
+            let up_im = A * (s_im * sqrt_A / Q);
+            let down_re = 1 - A * s_im * s_im;
+            let down_im = s_im * sqrt_A / Q;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        },
+        (wc, Q, db, w) => {
+            let a = Math.sin(wc) / (2 * Q);
+            let cosw = Math.cos(wc);
+            let sqrt_A = Math.pow(10, db / 80);
+            let A = sqrt_A * sqrt_A;
+            b0 = A * ((A + 1) - (A - 1) * cosw + 2 * sqrt_A * a);
+            b1 = 2 * A * ((A - 1) - (A + 1) * cosw);
+            b2 = A * ((A + 1) - (A - 1) * cosw - 2 * sqrt_A * a);
+            a1 = -2 * ((A - 1) + (A + 1) * cosw);
+            a2 = (A + 1) + (A - 1) * cosw - 2 * sqrt_A * a;
+            let inva0 = 1.0 / ((A + 1) + (A - 1) * cosw + 2 * sqrt_A * a);
+            b0 *= inva0;
+            b1 *= inva0;
+            b2 *= inva0;
+            a1 *= inva0;
+            a2 *= inva0;
+
+            let re = Math.cos(w);
+            let im = Math.sin(w);
+            let re2 = re * re - im * im;
+            let im2 = 2 * re * im;
+
+            let up_re = b0 * re2 + b1 * re + b2;
+            let up_im = b0 * im2 + b1 * im;
+            let down_re = re2 + a1 * re + a2;
+            let down_im = im2 + a1 * im;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        }
+        );
+    </script>
+    <hr>
+
+    <p>还有一种方式是可以计算功率版本的，只需要计算H(s)与H(-s)的乘积即可</p>
+    <p>例如一个bilinear lowpass</p>
+    <p>\[H(s)=\frac{1}{s^2+\frac{s}{Q}+1}\]</p>
+    <p>\[H(s)*H(-s)=\frac{Q^2}{x^2+Q^2(x^2-1)^2}\]</p>
+    <p>其中s=ix</p>
+    <p>\[s=\frac{s}{wc}\]</p>
+    <div id="filter9"></div>
+    <script>
+        setupFilterPlotQ('filter9', 0.5, 0.5,
+        (wc, Q, w)=>{
+            let wc_analog = Math.tan(wc / 2);
+            let w_analog = Math.tan(w / 2);
+            let x = w_analog / wc_analog;
+
+            let sqrt_up = Q;
+            let t = (x * x - 1);
+            let down = x * x + Q * Q * t * t;
+
+            let g = sqrt_up / Math.sqrt(down);
+            return g;
+        }, (wc, Q, w)=>{
+            let a = Math.sin(wc) / (2 * Q);
+            let cosw = Math.cos(wc);
+            let b0 = (1 - cosw) / 2;
+            let b1 = 1 - cosw;
+            let b2 = b0;
+            let a1 = -2 * cosw;
+            let a2 = 1 - a;
+            let inva0 = 1 / (1 + a);
+            b0 *= inva0;
+            b1 *= inva0;
+            b2 *= inva0;
+            a1 *= inva0;
+            a2 *= inva0;
+
+            let re = Math.cos(w);
+            let im = Math.sin(w);
+            let re2 = re * re - im * im;
+            let im2 = 2 * re * im;
+
+            let up_re = b0 * re2 + b1 * re + b2;
+            let up_im = b0 * im2 + b1 * im;
+            let down_re = re2 + a1 * re + a2;
+            let down_im = im2 + a1 * im;
+
+            let down = down_re * down_re + down_im * down_im;
+            let z_re = up_re * down_re + up_im * down_im;
+            let z_im = up_im * down_re - up_re * down_im;
+            let g = Math.sqrt(z_re * z_re + z_im * z_im) / down;
+            return g;
+        });
+    </script>
+    <hr>
+    
+    <script>
+        let timer = setInterval(function() {
+            // window.scrollTo(0, document.body.scrollHeight);
+        }, 100);
+    </script>
+</body>
+</html>
