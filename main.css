@@ -56,3 +56,26 @@ img{
 *{
     box-sizing: border-box;
 }
+
+/* 3d border like section */
+section {
+    border-top: 2px solid white;
+    border-left: 2px solid white;
+    border-bottom: 2px solid black;
+    border-right: 2px solid black;
+    margin: 16px 0px;
+}
+
+.section-title {
+    position: sticky;
+    top: 0;
+    
+    background-color: #dddddd;
+    padding: 16px 8px;
+    margin: 0;
+    z-index: 10;
+}
+
+.section_content {
+    padding: 0px 4px;
+}

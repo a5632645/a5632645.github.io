@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TPT滤波器设计总结</title>
+
+    <link rel="stylesheet" href="../../main.css">
+    <!-- code -->
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <!-- math -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <a href="../../index.html">back</a>
+    <hr>
+
+    <section>
+        <h2 class="section-title">TPT 积分器</h2>
+        <div class="section_content">
+            <img src="./tpt.png" alt="tpt">
+            <pre>
+                <code>
+                    float TickTrapezoidalIntegrator(float x, float w) {
+                        float g = tan(w / 2);
+                        x *= g;
+                        float y = s_ + x;
+                        s_ = y + x;
+                        return y;
+                    }
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">TPT 1 pole Lowpass</h2>
+        <div class="section_content">
+            <img src="./1pole.png" alt="image">
+            <p>we have</p>
+            <p>\[yLP=g*yHP+s\]</p>
+            <p>\[yHP=x-yLP\]</p>
+            <p>so</p>
+            <p>\[yHP=\frac{1}{1+g}(x-s)\]</p>
+            <p>\[yLP=\frac{g}{1+g}x+\frac{1}{1+g}s\]</p>
+            <img src="./1pole-tpt.png" alt="1pole-tpt">
+            <pre>
+                <code>
+                    float TickTptLP(float x, float w) {
+                        // lowpass
+                        float g = std::tan(w / 2);
+                        // highpass
+                        float yHP = (x - s) / (1 + g);
+                        float v = g * yHP;
+                        // float gLP = g / (1 + g);
+                        // float const v = gLP * (x - s_);
+                        s_ += v;
+                        float yLP = s_;
+                        s_ += v;
+                        return yLP;
+                    }
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">TPT SVF</h2>
+        <div class="section_content">
+            <img src="svf-analog.png" alt="svf-analog">
+            <p>we have</p>
+            <p>\[yHP=x-2R*yBP-yLP\]</p>
+            <p>\[yBP=g*yHP+s1\]</p>
+            <p>\[yLP=g*yBP+s2\]</p>
+            <p>so</p>
+            <p>\[yHP=\frac{x-(2R+g)s1-s2}{1+2Rg+g^2}\]</p>
+            <p>\[yBP=\frac{g(x-s2)+s1}{1+2Rg+g^2}\]</p>
+            <p>\[yLP=\frac{g^2x+gs1+(1+2Rg)s2}{1+2Rg+g^2}\]</p>
+            <pre>
+                <code>
+                    float TickSVF(float x, float w, float Q) {
+                        float g = tan(w / 2);
+                        float R2 = 1 / Q;
+        
+                        float yHP = (x - (R2 + g) * s1_ - s2_) / (1 + R2 * g + g * g);
+                        float yBP = yHP * g + s1_;
+                        s1_ = g * yHP + yBP;
+                        float yLP = yBP * g + s2_;
+                        s2_ = g * yBP + yLP;
+                        float yBPn = yBP * R2;
+        
+                        return yLP;
+                    }
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">Ladder 4 pole lowpass</h2>
+        <div class="section_content">
+            <img src="ladder-4pole.png" alt="ladder-4pole">
+            <p>we have</p>
+            <p>\[LP[n]=\frac{g}{1+g}E+\frac{1}{1+g}s=A*E+B*s[n]\]</p>
+            <p>\[u=x-k*LP4\]</p>
+            <p>\[LP1=Au+B*s1\]</p>
+            <p>\[LP2=A*LP1+B*s2\]</p>
+            <p>\[LP3=A*LP2+B*s3\]</p>
+            <p>\[LP4=A*LP3+B*s4\]</p>
+            <p>so</p>
+            <p>\[u=\frac{x-Bk(s4+s3*A+s2*A^2+s1*A^3)}{1+kA^4}\]</p>
+            <pre>
+                <code>
+                    float TickTptLP(float x, float& s, float glp) {
+                        float u = glp * (x - s);
+                        s += u;
+                        float y = s;
+                        s += u;
+                        return y;
+                    }
+        
+                    float TickLadderLP(float x, float w, float k) {
+                        float g = tan(w / 2);
+                        // float k = 3.99; // [0,4] => [stable, self-oscillation]
+                        float A = g / (1 + g);
+                        float B = 1 / (1 + g);
+                        float S = s4_ + s3_ * A + s2_ * A * A + s1_ * A * A * A;
+                        float u = (x - B * k * S) / (1 + k * A * A * A * A);
+        
+                        float lp1 = TickLadderLP(u, s1_, A);
+                        float lp2 = TickLadderLP(lp1, s2_, A);
+                        float lp3 = TickLadderLP(lp2, s3_, A);
+                        float lp4 = TickLadderLP(lp3, s4_, A);
+        
+                        return lp4;
+                    }
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">Ladder 4 pole Highpass</h2>
+        <div class="section_content">
+            <img src="ladder-4pole-gp.png" alt="ladder-4pole-hp">
+            <p>we have</p>
+            <p>\[HP[n]=\frac{1}{1+g}(E-s)=A*(E-s)\]</p>
+            <p>\[u=x-k*HP4\]</p>
+            <p>\[HP1=A*(u-s1)\]</p>
+            <p>\[HP2=A*(HP1-s2)\]</p>
+            <p>\[HP3=A*(HP2-s3)\]</p>
+            <p>\[HP4=A*(HP3-s4)\]</p>
+            <p>so</p>
+            <p>\[u=\frac{x+k(s4*g+s3*g^2+s2*g^3+s1*g^4)}{1+g^4k}\]</p>
+            <pre>
+                <code>
+                    float TickTptHP(float x, float& s, float glp) {
+                        float u = glp * (x - s);
+                        s += u;
+                        float y = s;
+                        s += u;
+                        return x - y;
+                    }
+        
+                    float TickLadderHP(float x, float w, float k) {
+                        float g = tan(w / 2);
+                        // float k = 3.99; // [0,4] => [stable, self-oscillation]
+                        float gHP = g / (1 + g);
+                        float A = 1 / (1 + g);
+                        float S = s4_ * A + s3_ * A * A + s2_ * A * A * A + s1_ * A * A * A * A;
+                        float u = (x + k * S) / (1 + k * A * A * A * A);
+        
+                        float hp1 = TickLadderHP(u, s1_, gHP);
+                        float hp2 = TickLadderHP(hp1, s2_, gHP);
+                        float hp3 = TickLadderHP(hp2, s3_, gHP);
+                        float hp4 = TickLadderHP(hp3, s4_, gHP);
+        
+                        return hp4;
+                    }
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">Transpose 2 pole Sallen-Key</h2>
+        <div class="section_content">
+            <img src="transpose-sallen-key.png" alt="transpose-sallen-key">
+            <p>we have</p>
+            <p>\[u=x+k*HP2\]</p>
+            <p>\[LP1=\frac{g}{1+g}u+\frac{1}{1+g}s1\]</p>
+            <p>\[HP2=\frac{1}{1+g}(LP1-s2)\]</p>
+            <p>so</p>
+            <p>\[u=\frac{x(1+g)^2-(1+g)ks2+ks1}{(1+g)^2-gk}\]</p>
+            <pre>
+                <code>
+                    // k [0,2]
+                    auto TickTranspoceSallenKey(float x, float w, float k) {
+                        struct Output {
+                            float lp2;
+                            float bp2;
+                            float hp2;
+                        } output;
+        
+                        float g = tan(w / 2);
+                        float G = (1 + g);
+        
+                        float u = x * G * G - G * k * s2_ + k * s1_;
+                        u /= (G * G - g * k);
+                        float lp1 = TickTptLP(u, s1_, glp_);
+                        float hp1 = u - lp1;
+                        output.lp2 = TickTptLP(lp1, s2_, glp_);
+                        output.bp2 = lp1 - output.lp2;
+                        output.hp2 = hp1 - output.bp2;
+        
+                        return output;
+                    }
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">4 pole ladder bandpass</h2>
+        <div class="section_content">
+            <img src="ladder-4pole-bp.png" alt="ladder-4pole-bp">
+            <p>让我们使用SVF来实现</p>
+            <p>\[yBPN=\frac{g(Rx-s2)+s1}{1+2Rg+g^2}\]</p>
+            <p class="frame">你注意到上面的BPN只是x * R了吗，我们把后面的0.5给合并到2R里面去了</p>
+            <p>we have</p>
+            <p>\[u=x+k*BP2\]</p>
+            <p>\[B=\frac{1}{1+2Rg+g^2}\]</p>
+            <p>\[BP1=B(g(Ru-s2)+s1)\]</p>
+            <p>\[BP2=B(g(R*BP1-s4)+s3)\]</p>
+            <p>so</p>
+            <p>\[u=\frac{B^2Rgk(gs2-s1)+Bk(gs4-s3)-x}{B^2R^2g^2k-1}\]</p>
+            <pre>
+                <code>
+                    static float TickHalfNormBandpass(float x, float g, float& s1, float& s2, float B) noexcept {
+                        float bp = B * (g * (x - s2) + s1);
+                        float bp2 = bp + bp;
+                        s1 = bp2 - s1;
+                        float v22 = g * bp2;
+                        s2 += v22;
+                        return bp;
+                    }
+        
+                    // k [0,16(may be 4)]
+                    // R > 0
+                    auto TickTrueBandpass(float x, float w, float R, float k) noexcept {
+                        struct Output {
+                            float BPn1;
+                            float BPn2;
+                        } output;
+        
+                        float g = tan(w / 2);
+                        float B = 1 / (1 + 2 * R * g + g * g);
+                        float u = B * B * R * g * k * (g * s2_ - s1_) + B * k * (g * s4_ - s3_) - x;
+                        u /= (B * B * R * R * g * g * k - 1);
+        
+                        output.BPn1 = TickHalfNormBandpass(u * R, g, s1_, s2_, B);
+                        output.BPn2 = TickHalfNormBandpass(output.BPn1 * R, g, s3_, s4_, B);
+        
+                        return output;
+                    }
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">8 pole ladder lowpass</h2>
+        <div class="section_content">
+            <img src="ladder-8pole-lp.png" alt="ladder-8pole-lp">
+            <p>we have</p>
+            <p>\[LP[n]=\frac{g}{1+g}E+\frac{1}{1+g}s=A*E+B*s[n]\]</p>
+            <p>\[u=x-k*LP8\]</p>
+            <p>\[LP1=Au+B*s1\]</p>
+            <p>\[LP2=A*LP1+B*s2\]</p>
+            <p>\[LP3=A*LP2+B*s3\]</p>
+            <p>\[LP4=A*LP3+B*s4\]</p>
+            <p>\[LP5=A*LP4+B*s5\]</p>
+            <p>\[LP6=A*LP5+B*s6\]</p>
+            <p>\[LP7=A*LP6+B*s7\]</p>
+            <p>\[LP8=A*LP7+B*s8\]</p>
+            <p>so</p>
+            <p>\[u=\frac{x-Bk(s8+A(s7+A(s6+A(s5+A(s4+A(s3+A(s2+As1)))))))}{1+kA^8}\]</p>
+            <pre>
+                <code>
+                    /**
+                    * @param k [0,1.884]
+                    */
+                    void Set(float w, float k) noexcept {
+                        g_ = std::tan(w / 2) * (1 + std::numbers::sqrt2_v<float>);
+                        k_ = k;
+                    }
+                    
+                    auto Tick(float x) noexcept {
+                        struct Output {
+                            float lp1;
+                            float lp2;
+                            float lp3;
+                            float lp4;
+                            float lp5;
+                            float lp6;
+                            float lp7;
+                            float lp8;
+                        } output;
+        
+                        float B = 1 / (1 + g_);
+                        float A = g_ * B;
+                        float S = s_[7] + A * (s_[6] + A * (s_[5] + A * (s_[4] + A * (s_[3] + A * (s_[2] + A * (s_[1] + A * s_[0]))))));
+                        float u = x - B * k_ * S;
+                        u /= (1 + k_ * A * A * A * A * A * A * A * A);
+        
+                        output.lp1 = TickLpTPT(u, s_[0], A);
+                        output.lp2 = TickLpTPT(output.lp1, s_[1], A);
+                        output.lp3 = TickLpTPT(output.lp2, s_[2], A);
+                        output.lp4 = TickLpTPT(output.lp3, s_[3], A);
+                        output.lp5 = TickLpTPT(output.lp4, s_[4], A);
+                        output.lp6 = TickLpTPT(output.lp5, s_[5], A);
+                        output.lp7 = TickLpTPT(output.lp6, s_[6], A);
+                        output.lp8 = TickLpTPT(output.lp7, s_[7], A);
+        
+                        return output;
+                    }
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">OTA 1 pole</h2>
+        <div class="section_content">
+            <img src="ota-1pole.png" alt="ota-1pole">
+            <p>为了简便使用以下非线性函数</p>
+            <p>tanh -><span>\[x/(1+|x|)\]</span></p>
+            <p>we have</p>
+            <p>\[u=x-g\frac{u}{1+|u|}-s\]</p>
+            <p>so</p>
+            <b>u>0</b>
+            <p>\[u=x-\frac{gu}{1+u}-s\]</p>
+            <p>\[\frac{gu}{1+u}=-u+(x-s)\]</p>
+            <p>\[u=\frac{1}{2}((-1-g-s+x)+\sqrt{4(x-s)+(-1-g-s+x)^2})\]</p>
+            <b>u<0</b>
+            <p>\[u=x-\frac{gu}{1-u}-s\]</p>
+            <p>\[\frac{gu}{1-u}=-u+(x-s)\]</p>
+            <p>\[u=\frac{1}{2}(1+g-s+x-\sqrt{4(s-x)+(1+g-s+x)^2})\]</p>
+            <pre>
+                <code>
+                    float TickOTALp(float x, float w) {
+                        float bias = x - s_;
+                        float g = tan(w / 2);
+                        float u = 0;
+                        if (bias > 0) {
+                            // u > 0
+                            float t = -1 - g - s_ + x;
+                            u = t + std::sqrt(4*(x-s_)+t*t);
+                        }
+                        else {
+                            // u < 0
+                            float t = 1 + g - s_ + x;
+                            u = t - std::sqrt(4*(s_-x)+t*t);
+                        }
+                        u /= 2;
+        
+                        u = u / (1 + std::abs(u));
+                        u *= g;
+                        s_ += u;
+                        float y = s_;
+                        s_ += u;
+        
+                        return y;
+                    }
+                </code>
+            </pre>
+        </div>
+    </section>
+    <script>
+        document.onload = setInterval(() => {
+            // window.scrollTo(0, document.body.scrollHeight);
+        }, 1000);
+    </script>
+</body>
+</html>
