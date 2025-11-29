@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 
 ########################################
@@ -16,7 +17,7 @@ cmake_presets_file = "CMakePresets.json"
 preset_name = "default"
 
 # common settings
-build_path = "build"
+build_path = "build2"
 generator = "Ninja"
 # Debug;Release;RelWithDebInfo
 build_type = "Debug"
@@ -25,6 +26,7 @@ cmake_get_target_script_path = "get_cmake_target_info.cmake"
 # debug settings
 debug_adapter = "CodeLLDB"
 debug_cwd = "."
+# launch;attach
 debug_request = "launch"
 build_before_debug = True
 
@@ -165,20 +167,90 @@ with open(zed_tasks_path, "w") as f:
 # generate debug.json
 debug_configurations = []
 
+# merge old debug config file
+old_debug_configs = {}
+if os.path.exists(zed_debug_path):
+    name_from_label_pattern = re.compile(r"\[(.*?)\]")
+    with open(zed_debug_path, "r") as f:
+        old_debug_json = json.load(f)
+    for cfg in old_debug_json:
+        target_label = cfg["label"]
+        match = name_from_label_pattern.search(target_label)
+        if not match:
+            # this config should not handle by us
+            debug_configurations.append(cfg)
+        else:
+            # record it
+            target_name = match.group(1)
+            old_debug_configs[target_name] = cfg
+
+# merge old and new debug config
 for target_info in target_info_list:
-    debug_config = {
-        "label": f"Debug [{target_info['name']}]",
-        "adapter": debug_adapter,
-        "cwd": debug_cwd,
-        "program": target_info["path"],
-        "request": debug_request,
-    }
-    if build_before_debug:
-        debug_config["build"] = {
-            "command": "cmake",
-            "args": ["--build", build_path, "--target", target_info["name"]],
-        }
-    debug_configurations.append(debug_config)
+    generate_name = target_info["name"]
+    generate_path = target_info["path"]
+
+    # 尝试从旧配置中取出当前目标配置，如果不存在则为 None
+    old_debug_cfg = old_debug_configs.pop(generate_name, None)
+
+    # 确定要使用的基础配置
+    current_config = None
+
+    # 路径检查：是否是无效路径（NOTFOUND 或生成器表达式）
+    path_is_invalid = (
+        generate_path.startswith("OUTPUT_DIR-NOTFOUND") or "$" in generate_path
+    )
+
+    if path_is_invalid:
+        # 情况 1: CMake 路径无效 (使用旧配置或创建占位符)
+        if old_debug_cfg:
+            # 使用旧配置，保留用户自定义的 program 路径
+            current_config = old_debug_cfg
+            # 确保 build 任务是最新/正确的
+            if "build" not in current_config and build_before_debug:
+                current_config["build"] = {
+                    "command": "cmake",
+                    "args": ["--build", build_path, "--target", generate_name],
+                }
+        else:
+            # 新配置，但路径无效。使用目标名称作为占位符路径。
+            current_config = {
+                "label": f"Debug [{generate_name}]",
+                "adapter": debug_adapter,
+                "cwd": debug_cwd,
+                "program": generate_name,  # 路径无效，用名称占位
+                "request": debug_request,
+            }
+    else:
+        # 情况 2: CMake 路径有效 (生成或更新)
+        if old_debug_cfg:
+            # 目标已存在：使用旧配置，但更新 program 路径为 CMake 找到的路径
+            current_config = old_debug_cfg
+            current_config["program"] = generate_path  # 覆盖为有效路径
+        else:
+            # 新目标：创建新配置
+            current_config = {
+                "label": f"Debug [{generate_name}]",
+                "adapter": debug_adapter,
+                "cwd": debug_cwd,
+                "program": generate_path,  # 使用有效路径
+                "request": debug_request,
+            }
+
+    # 统一处理 build 任务
+    if current_config and build_before_debug:
+        current_config.setdefault(
+            "build",
+            {
+                "command": "cmake",
+                "args": ["--build", build_path, "--target", generate_name],
+            },
+        )
+
+    if current_config:
+        debug_configurations.append(current_config)
+
+for target_name, cfg in old_debug_configs.items():
+    debug_configurations.append(cfg)
 
 # Ensure .zed directory exists
 zed_dir = os.path.dirname(zed_debug_path)
