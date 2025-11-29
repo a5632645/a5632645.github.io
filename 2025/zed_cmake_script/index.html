@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../../main.css">
+    <title>zed cmake脚本</title>
+</head>
+<body>
+    <a href="../../index.html">back</a>
+    <b>zed cmake脚本</b>
+    <hr>
+
+    <section>
+        <h3 class="section-title">简介</h3>
+        <div class="section_content">
+            <p>我是Zed新人，我喜欢Zed的速度，它速度超级快，就是比较侧重于Ai功能，其他功能都欠缺</p>
+            <p>我曾经试过为Zed开发扩展，但扩展里只能读文件不能写文件，于是我就用python制作了下面的脚本</p>
+            <p>下面是和AI一起做的zed的cmake脚本，可以生成tasks.json和debug.json</p>
+            <li><a href="zed_cmake_gen.py">zed_cmake_gen.py</a></li>
+            <li><a href="get_cmake_target_info.cmake">get_cmake_target_info.cmake</a></li>
+            <p><b>这两个文件必须一起使用</b></p>
+        </div>
+    </section>
+    <section>
+        <h3 class="section-title">使用方法</h3>
+        <div class="section_content">
+            <p>首先创建一个新的cmake工程，将这两个文件放在顶层目录里面</p>
+            <img src="put_file.png" alt="put_file">
+            <p>我也是cmake新人，不怎么用cmake的高级功能，所以有一些简单的设置选项</p>
+            <img src="settings.png" alt="settings">
+            <p><b>注意：我没有测试过CMakePreset功能</b></p>
+            <hr>
+            <p>第二步需要您在顶层CMakeLists.txt的末尾中添加这一行来输出所有target的信息</p>
+            <img src="cmake_add.png" alt="cmake_add">
+            <p><b>如果您不加这一句，脚本无法获取target信息就会报错，无法生成tasks.json和debug.json</b></p>
+            <hr>
+            <p>第三步在终端使用python运行这个脚本即可</p>
+            <img src="running.png" alt="running">
+            <p><b>注意：如果新增或者减少了Target，需要重新运行。如果是生成器不同导致CMake报错，您需要手动删除CMake缓存再次运行脚本。对于无Target增减的，程序生成一个CMake配置的任务您可以调用它</b></p>
+            <p>第四步，使用Zed的tasks.json和debug.json</p>
+            <img src="tasks.png" alt="tasks">
+            <img src="debug.png" alt="debug">
+        </div>
+    </section>
+    <script>
+        let timer = setInterval(function() {
+            // window.scrollTo(0, document.body.scrollHeight);
+        }, 100);
+    </script>
+</body>
+</html>
