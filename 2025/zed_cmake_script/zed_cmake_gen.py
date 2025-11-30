@@ -1,5 +1,6 @@
 import json
 import os
+import platform
 import re
 import subprocess
 
@@ -12,7 +13,7 @@ cxx_path = r"C:\Program Files\LLVM\bin\clang.exe"
 cmake_test_arg = "-DCMAKE_TRY_COMPILE_TARGET_TYPE=EXECUTABLE"
 
 # preset settings
-use_preset = True
+use_preset = False
 cmake_presets_file = "CMakePresets.json"
 preset_name = "default"
 
@@ -28,17 +29,20 @@ debug_adapter = "CodeLLDB"
 debug_cwd = "."
 # launch;attach
 debug_request = "launch"
-build_before_debug = True
+build_before_debug = True  # if False, it will remove all build task in debug.json
+add_exe_prefix = True  # if True, it will add .exe on windows platform
 
 ########################################
 # generated files
 zed_tasks_path = ".zed/tasks.json"
 zed_debug_path = ".zed/debug.json"
+# cmake_target_info.json matchs what in ${cmake_get_target_script_path}
 cmake_target_info_file = os.path.join(build_path, "cmake_target_info.json")
 
 ########################################
 # do not change, help vars
 is_cmake_configed = os.path.exists(os.path.join(build_path, "CMakeCache.txt"))
+should_add_exe_prefix = add_exe_prefix and platform.system() == "Windows"
 should_use_preset = use_preset and os.path.exists(cmake_presets_file)
 cmake_c_complier_arg = f'-DCMAKE_C_COMPILER:FILEPATH="{c_path}"'
 cmake_cxx_complier_arg = f'-DCMAKE_CXX_COMPILER:FILEPATH="{cxx_path}"'
@@ -188,6 +192,8 @@ if os.path.exists(zed_debug_path):
 for target_info in target_info_list:
     generate_name = target_info["name"]
     generate_path = target_info["path"]
+    if should_add_exe_prefix:
+        generate_path = generate_path + ".exe"
 
     # 尝试从旧配置中取出当前目标配置，如果不存在则为 None
     old_debug_cfg = old_debug_configs.pop(generate_name, None)
@@ -205,12 +211,6 @@ for target_info in target_info_list:
         if old_debug_cfg:
             # 使用旧配置，保留用户自定义的 program 路径
             current_config = old_debug_cfg
-            # 确保 build 任务是最新/正确的
-            if "build" not in current_config and build_before_debug:
-                current_config["build"] = {
-                    "command": "cmake",
-                    "args": ["--build", build_path, "--target", generate_name],
-                }
         else:
             # 新配置，但路径无效。使用目标名称作为占位符路径。
             current_config = {
@@ -245,6 +245,9 @@ for target_info in target_info_list:
                 "args": ["--build", build_path, "--target", generate_name],
             },
         )
+    elif current_config and not build_before_debug:
+        if "build" in current_config:
+            del current_config["build"]
 
     if current_config:
         debug_configurations.append(current_config)

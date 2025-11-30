@@ -7,15 +7,43 @@
     <title>zed cmake脚本</title>
 </head>
 <body>
-    <a href="../../index.html">back</a>
-    <b>zed cmake脚本</b>
-    <hr>
-
+    <div>
+        <a href="../../index.html">back</a>
+        <b>zed cmake脚本</b>
+        <hr>
+    </div>
+    <section>
+        <h3 class="section-title">修改历史</h3>
+        <div class="section_content">
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td nowrap>2025-11-30</td>
+                        <td>更新了脚本，现在支持add_subdirectory创建的target了，build_before_debug行为改成了如果存在就删除，默认cmake脚本输出了路径则覆盖用户的路径</td>
+                    </tr>
+                    <tr>
+                        <td nowrap>2025-11-29</td>
+                        <td>更新了脚本，因为cmake脚本在处理add_subdirectory添加的target时报告了错误的路径，python脚本修改为了如果用户定义了并且cmake没有找到路径则保持不变</td>
+                    </tr>
+                    <tr>
+                        <td nowrap>2025-11-29</td>
+                        <td>首次创建</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
     <section>
         <h3 class="section-title">简介</h3>
         <div class="section_content">
             <p>我是Zed新人，我喜欢Zed的速度，它速度超级快，就是比较侧重于Ai功能，其他功能都欠缺</p>
-            <p>我曾经试过为Zed开发扩展，但扩展里只能读文件不能写文件，于是我就用python制作了下面的脚本</p>
+            <p>我曾经试过为Zed开发扩展，但扩展里只能读文件不能写文件<b>(疑问：真的不能写吗)</b>，于是我就用python制作了下面的脚本</p>
             <p>下面是和AI一起做的zed的cmake脚本，可以生成tasks.json和debug.json</p>
             <li><a href="zed_cmake_gen.py">zed_cmake_gen.py</a></li>
             <li><a href="get_cmake_target_info.cmake">get_cmake_target_info.cmake</a></li>
