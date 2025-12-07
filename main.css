@@ -79,4 +79,5 @@ section {
 
 .section_content {
     padding: 0px 4px;
+    overflow: auto;
 }

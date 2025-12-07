@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GD32 IPA</title>
+
+    <link rel="stylesheet" href="../../main.css">
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+<body>
+    <div>
+        <a href="../../index.html">back</a>
+        <b>gd32h757zmt6 IPA调教</b>
+        <hr>
+    </div>
+    <section>
+        <h3 class="section-title">修改历史</h3>
+        <div class="section_content">
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td nowrap>2025-12-07</td>
+                        <td>首次创建</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+    <section>
+        <h3 class="section-title">为什么要这样做</h3>
+        <div class="section_content">
+            <p>GD32有一个和STM32的DMA2d相对的外设叫IPA，他有更多的功能，比如<b>缩放</b>，<b>旋转</b>，但是LVGL没有内嵌的支持。不支持能不能用STM32的HAL库直接运行。</p>
+            <p>IPA非常难用，它的参数都很抽象，而且需要CPU来计算一些边界条件来阻止IPA访问到你不想要的内存区域。</p>
+            <p><b>不是，哥们，为什么不能设计成更简单的方式啊。就像下面的那样，从某个SRC图形复制一个区域到LTDC缓冲区的某个特定位置。</b></p>
+        </div>
+        <hr>
+        <h3 class="section-title">TODO</h3>
+        <div class="section_content">
+            <p>缩放和旋转功能</p>
+        </div>
+    </section>
+    <section>
+        <h3 class="section-title">我想要的功能</h3>
+        <div class="section_content">
+            <p>如下图所示，绿色是原始图像大小，蓝色是要从图像上复制的区域，白色是LTDC缓冲区。</p>
+            <p>就这个小示例，如果没有特判裁剪区域填写IPA参数，那么IPA要么访问超出原始图像的内存，要么访问超出LTDC缓冲区的内存，前者造成错误的内容，后者在双缓冲的情况下会意外的写到备份缓冲区。</p>
+            <canvas class="frame" id="1" width="800" height="600"></canvas>
+            <script>
+                function Ipa_Min(a, b) { return a < b ? a : b; }
+                function Ipa_Max(a, b) { return a > b ? a : b; }
+                function Ipa_Clamp(a, min, max) { return a < min ? min : a > max ? max : a; }
+
+                let canvas = document.getElementById('1');
+                let ctx = canvas.getContext('2d');
+
+                // input
+                let b_ltdc_w = 400;
+                let b_ltdc_h = 300;
+                let b_dest_x = 50;
+                let b_dest_y = 50;
+
+                let b_src_x = 90;
+                let b_src_y = 50;
+                let b_src_copy_w = 100;
+                let b_src_copy_h = 100;
+                let b_src_w = 100;
+                let b_src_h = 80;
+
+                //// bias draw
+                let x_bias = 100;
+                let y_bias = 100;
+                ctx.fillStyle = "rgba(255, 255, 255, 1.0)";
+                ctx.fillRect(x_bias + 0, y_bias + 0, b_ltdc_w, b_ltdc_h);
+                
+                ctx.font = "14px Arial";
+                ctx.fillStyle = "black";
+                ctx.fillText("LTDC", x_bias + 10, y_bias + 30);
+
+                ctx.fillStyle = "rgba(0, 255, 0, 0.5)";
+                ctx.fillRect(x_bias + 0, y_bias + b_ltdc_h, b_src_w, b_src_h);
+                ctx.font = "14px Arial";
+                ctx.fillStyle = "black";
+                ctx.fillText("Source Image", x_bias, y_bias + b_ltdc_h + 20);
+
+                ctx.fillStyle = "rgba(0, 255, 255, 0.5)";
+                ctx.fillRect(x_bias + b_src_x, y_bias + b_src_y + b_ltdc_h, b_src_copy_w, b_src_copy_h);
+                ctx.font = "14px Arial";
+                ctx.fillStyle = "black";
+                ctx.fillText("Source Part", x_bias + b_src_x, y_bias + b_src_y + b_ltdc_h);
+
+                // first clamping src bound
+                let src_end_x = b_src_x + b_src_copy_w;
+                let src_end_y = b_src_y + b_src_copy_h;
+                src_end_x = Ipa_Min(src_end_x, b_src_w);
+                src_end_y = Ipa_Min(src_end_y, b_src_h);
+                let src_x = Ipa_Clamp(b_src_x, 0, b_src_w);
+                let src_y = Ipa_Clamp(b_src_y, 0, b_src_h);
+                let src_copy_w = Ipa_Max(src_end_x - src_x, 0);
+                let src_copy_h = Ipa_Max(src_end_y - src_y, 0);
+
+                ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+                ctx.fillRect(x_bias + src_x, y_bias + src_y + b_ltdc_h, src_copy_w, src_copy_h);
+                ctx.font = "14px Arial";
+                ctx.fillStyle = "black";
+                ctx.fillText("Source Clamp Part", x_bias + src_x, y_bias + src_y + src_copy_h + b_ltdc_h);
+
+                ctx.fillStyle = "rgba(0, 255, 255, 0.5)";
+                ctx.fillRect(x_bias + b_dest_x, y_bias + b_dest_y, b_src_copy_w, b_src_copy_h);
+                ctx.font = "14px Arial";
+                ctx.fillStyle = "black";
+                ctx.fillText("part", x_bias + b_dest_x, y_bias + b_dest_y + 20);
+
+                ctx.fillStyle = "rgba(0, 255, 0, 0.5)";
+                ctx.fillRect(x_bias + b_dest_x - b_src_x, y_bias + b_dest_y - b_src_y, b_src_w, b_src_h);
+                ctx.font = "14px Arial";
+                ctx.fillStyle = "black";
+                ctx.fillText("image", x_bias + b_dest_x - b_src_x, y_bias + b_dest_y - b_src_y);
+
+                if (src_copy_w == 0 || src_copy_h == 0) {
+                    
+                }
+                else {
+                    let old_b_dest_x = b_dest_x;
+                    let old_b_dest_y = b_dest_y;
+                    b_dest_x -= src_x - b_src_x;
+                    b_dest_y -= src_y - b_src_y;
+                    // get intersection
+                    let x = Ipa_Max(b_dest_x, 0);
+                    let y = Ipa_Max(b_dest_y, 0);
+                    let w = Ipa_Min(b_ltdc_w, b_dest_x + src_copy_w) - x;
+                    let h = Ipa_Min(b_ltdc_h, b_dest_y + src_copy_h) - y;
+                    w = Ipa_Max(0, w);
+                    h = Ipa_Max(0, h);
+
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+                    ctx.fillRect(x_bias + x, y_bias + y, w, h);
+                    ctx.font = "14px Arial";
+                    ctx.fillStyle = "white";
+                    ctx.fillText("intersection", x_bias + x, y_bias + y + h);
+
+                    // no need to call IPA
+                    if (w == 0 || h == 0) {
+
+                    }
+                    else {
+                        // output ipa dest bound
+                        let clamp_w = w;
+                        let clamp_h = h;
+                        let ltdc_x_offset = x;
+                        let ltdc_y_offset = y;
+                        let ltdc_line_offset = b_ltdc_w - w;
+
+                        let first_part = Ipa_Min(ltdc_line_offset, ltdc_x_offset);
+                        ctx.strokeStyle = "rgba(255, 0, 0, 1.0)";
+                        ctx.strokeRect(x_bias + ltdc_x_offset, y_bias + ltdc_y_offset, clamp_w, clamp_h);
+                        ctx.strokeRect(x_bias, y_bias + ltdc_y_offset + clamp_h / 2, first_part, 1);
+                        ctx.strokeRect(x_bias + ltdc_x_offset + clamp_w, y_bias + ltdc_y_offset + clamp_h / 2, ltdc_line_offset - first_part, 1);
+                
+                        // output ipa src bound
+                        let src_x_offset = x - old_b_dest_x + b_src_x;
+                        let src_y_offset = y - old_b_dest_y + b_src_y;
+                        let src_line_offset = b_src_w - clamp_w;
+
+                        ctx.strokeRect(x_bias + src_x_offset, y_bias + src_y_offset + b_ltdc_h, clamp_w, clamp_h);
+                        first_part = Ipa_Min(src_line_offset, src_x_offset);
+                        ctx.strokeRect(x_bias, y_bias + src_y_offset + b_ltdc_h + clamp_h / 2, first_part, 1);
+                        let begin_x = src_x_offset + clamp_w;
+                        let end_x = begin_x + clamp_w - src_line_offset;
+                        end_x = Ipa_Min(end_x, b_src_w);
+                        ctx.strokeRect(x_bias + begin_x, y_bias + src_y_offset + b_ltdc_h + clamp_h / 2, end_x - begin_x, 1);
+                    }
+                }
+            </script>
+        </div>
+    </section>
+    <section>
+        <h3 class="section-title">我的解决方案</h3>
+        <div class="section_content">
+            <p>根据上面的canvs示例，我编写了一些辅助填写IPA参数的函数，返回false则是不需要调用IPA绘制。</p>
+            <pre>
+                <code>
+#pragma once
+
+static inline int Ipa_Min(int a, int b) { return a < b ? a : b; }
+static inline int Ipa_Max(int a, int b) { return a > b ? a : b; }
+static inline int Ipa_Clamp(int value, int min, int max) { return value < min ? min : (value > max ? max : value); }
+struct IpaFillBound {
+    // @note pixel[x,y] = ram[x + y * w]
+    // input
+    const int in_ltdc_w;   // LTDC缓冲区内存宽度
+    const int in_ltdc_h;   // LTDC缓冲区内存高度
+    const int in_x;        // 矩形的左上角x坐标
+    const int in_y;        // 矩形的左上角y坐标
+    const int in_w;        // 矩形的宽度
+    const int in_h;        // 矩形的高度
+    // output for ipa settings
+    int ltdc_x_offset;     // LTDC缓冲区的x偏移
+    int ltdc_y_offset;     // LTDC缓冲区的y偏移
+    int ltdc_line_offset;  // IPA行偏移
+    int clamp_w;           // IPA图形大小
+    int clamp_h;           // IPA图形大小
+};
+static inline bool IpaFillBound_Eval(struct IpaFillBound* bound) {
+    int xend = bound->in_x + bound->in_w;
+    int yend = bound->in_y + bound->in_h;
+    int x = Ipa_Clamp(bound->in_x, 0, bound->in_ltdc_w);
+    int y = Ipa_Clamp(bound->in_y, 0, bound->in_ltdc_h);
+    xend = Ipa_Clamp(xend, 0, bound->in_ltdc_w);
+    yend = Ipa_Clamp(yend, 0, bound->in_ltdc_h);
+    // no need to call IPA
+    if (x == xend || y == yend) return false;
+    bound->clamp_w = xend - x;
+    bound->clamp_h = yend - y;
+    bound->ltdc_x_offset = x;
+    bound->ltdc_y_offset = y;
+    bound->ltdc_line_offset = bound->in_ltdc_w - bound->clamp_w;
+    return true;
+}
+
+struct IpaBound {
+    // input
+    // @note pixel[x,y] = ram[x + y * w]
+    const int in_ltdc_w;     // LTDC缓冲区内存宽度
+    const int in_ltdc_h;     // LTDC缓冲区内存高度
+    const int in_dest_x;     // 目标矩形的左上角x坐标
+    const int in_dest_y;     // 目标矩形的左上角y坐标
+    const int in_src_x;      // 源图像复制区域的左上角x坐标
+    const int in_src_y;      // 源图像复制区域的左上角y坐标
+    const int in_src_copy_w; // 源图像复制区域的宽度
+    const int in_src_copy_h; // 源图像复制区域的高度
+    const int in_src_w;      // 源图像的宽度
+    const int in_src_h;      // 源图像的高度
+    // output for ipa settings
+    int ltdc_x_offset;       // LTDC缓冲区的x偏移
+    int ltdc_y_offset;       // LTDC缓冲区的y偏移
+    int ltdc_line_offset;    // IPA行偏移
+    int src_x_offset;        // 源图像的x偏移
+    int src_y_offset;        // 源图像的y偏移
+    int src_line_offset;     // IPA源图像行偏移
+    int clamp_w;             // IPA图形大小
+    int clamp_h;             // IPA图形大小
+};
+
+static inline bool IpaBound_Eval(struct IpaBound* bound) {
+    // first clamping src bound
+    int src_end_x = bound->in_src_x + bound->in_src_copy_w;
+    int src_end_y = bound->in_src_y + bound->in_src_copy_h;
+    src_end_x = Ipa_Clamp(src_end_x, 0, bound->in_src_w);
+    src_end_y = Ipa_Clamp(src_end_y, 0, bound->in_src_h);
+    int src_x = Ipa_Clamp(bound->in_src_x, 0, bound->in_src_w);
+    int src_y = Ipa_Clamp(bound->in_src_y, 0, bound->in_src_h);
+    int src_copy_w = Ipa_Max(src_end_x - src_x, 0);
+    int src_copy_h = Ipa_Max(src_end_y - src_y, 0);
+    if (src_copy_w == 0 || src_copy_h == 0) return false;
+
+    int dest_x = bound->in_dest_x + src_x - bound->in_src_x;
+    int dest_y = bound->in_dest_y + src_y - bound->in_src_y;
+    // get intersection
+    int x = Ipa_Max(dest_x, 0);
+    int y = Ipa_Max(dest_y, 0);
+    int w = Ipa_Min(bound->in_ltdc_w, dest_x + src_copy_w) - x;
+    int h = Ipa_Min(bound->in_ltdc_h, dest_y + src_copy_h) - y;
+    w = Ipa_Max(0, w);
+    h = Ipa_Max(0, h);
+    // no need to call IPA
+    if (w == 0 || h == 0) return false;
+
+    // output ipa dest bound
+    bound->clamp_w = w;
+    bound->clamp_h = h;
+    bound->ltdc_x_offset = x;
+    bound->ltdc_y_offset = y;
+    bound->ltdc_line_offset = bound->in_ltdc_w - w;
+
+    // output ipa src bound
+    bound->src_x_offset = x - bound->in_dest_x + bound->in_src_x;
+    bound->src_y_offset = y - bound->in_dest_y + bound->in_src_y;
+    bound->src_line_offset = bound->in_src_w - bound->clamp_w;
+
+    return true;
+}
+                </code>
+            </pre>
+            <p>还有两个简单的小测试，填充矩形和复制图像。</p>
+            <pre>
+                <code>
+static void IPA_FillRectange(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t color) {
+    struct IpaFillBound b = {
+      .in_h = h,
+      .in_ltdc_h = kLcdHeight,
+      .in_ltdc_w = kLcdWidth,
+      .in_w = w,
+      .in_x = x,
+      .in_y = y  
+    };
+    if (!IpaFillBound_Eval(&b)) return;
+
+    // 图形大小
+    IPA_IMS = ((b.clamp_w & 0x3ffff) << 16) | b.clamp_h;
+    // 寄存器颜色值
+    IPA_DPV = color;
+    // 目标起始地址
+    IPA_DMADDR = (uint32_t)(Lcd_Double_GetDrawGram() + b.ltdc_x_offset + b.ltdc_y_offset * b.in_ltdc_w);
+    // 目标颜色格式
+    IPA_DPCTL &= ~IPA_DPCTL_DPF;
+    IPA_DPCTL |= IPA_DPF_RGB565;
+    // 首行终点与下一行起点的像素间隔
+    IPA_DLOFF = b.ltdc_line_offset;
+    // IPA模式
+    IPA_CTL &= ~IPA_CTL_PFCM;
+    IPA_CTL |= IPA_CTL_TEN | IPA_FILL_UP_DE;
+    while (IPA_CTL & IPA_CTL_TEN)
+        ;
+
+    Lcd_Double_DrawFinish();
+    while (!Lcd_Double_CanDraw())
+        ;
+}
+
+#define RGB888_TO_RGB565(r, g, b) (((r & 0xf8) << 8) | ((g & 0xfc) << 3) | ((b & 0xf8) >> 3))
+
+constexpr uint16_t black = RGB888_TO_RGB565(0, 0, 0);
+constexpr uint16_t white = RGB888_TO_RGB565(255, 255, 255);
+constexpr uint16_t grey = RGB888_TO_RGB565(128, 128, 128);
+static const uint16_t kTestRGB565ImageData[] = {
+    black, white, black, white, black, white, black, white,
+    white, black, white, black, white, black, white, black,
+    black, white, black, white, black, white, black, white,
+    white, black, white, black, white, black, white, black,
+    black, white, black, white, black, white, black, white,
+    white, black, white, black, white, black, white, black,
+    black, white, black, white, black, white, black, white,
+    white, black, white, black, white, black, white, black
+};
+
+static void IPA_CopyImage(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t* image) {
+    struct IpaBound b = {
+        .in_ltdc_w = kLcdWidth,
+        .in_ltdc_h = kLcdHeight,
+        .in_dest_x = x,
+        .in_dest_y = y,
+        .in_src_x = 0,
+        .in_src_y = 0,
+        .in_src_copy_w = w,
+        .in_src_copy_h = h,
+        .in_src_w = w,
+        .in_src_h = h
+    };
+    if (!IpaBound_Eval(&b)) return;
+
+
+    // 目标起始地址
+    IPA_DMADDR = (uint32_t)(Lcd_Double_GetDrawGram() + b.ltdc_x_offset + b.ltdc_y_offset * b.in_ltdc_w);
+    IPA_FMADDR = (uint32_t)image;
+    // 图形颜色格式
+    IPA_FPCTL &= ~IPA_FPCTL_FPF;
+    IPA_FPCTL |= FOREGROUND_PPF_RGB565;
+    // 首行终点与下一行起点的像素间隔
+    IPA_FLOFF = b.src_line_offset;
+    IPA_DLOFF = b.ltdc_line_offset;
+    // 图形大小
+    IPA_IMS = ((b.clamp_w & 0x3ffff) << 16) | b.clamp_h;
+    // 目标颜色格式
+    // IPA_DPCTL &= ~IPA_DPCTL_DPF;
+    // IPA_DPCTL |= IPA_DPF_RGB565;
+    // IPA模式
+    IPA_CTL &= ~IPA_CTL_PFCM;
+    IPA_CTL |= IPA_CTL_TEN | IPA_FGTODE;
+    while (IPA_CTL & IPA_CTL_TEN)
+        ;
+
+    Lcd_Double_DrawFinish();
+    while (!Lcd_Double_CanDraw())
+        ;
+}
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h3 class="section-title">评论</h3>
+        <div class="section_content">
+            <script src="https://utteranc.es/client.js"
+                repo="a5632645/a5632645.github.io"
+                issue-term="pathname"
+                theme="github-light"
+                crossorigin="anonymous"
+                async>
+            </script>
+        </div>
+    </section>
+</body>
+</html>
