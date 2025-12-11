@@ -81,3 +81,27 @@ section {
     padding: 0px 4px;
     overflow: auto;
 }
+
+/* catalog css */
+.catalog-button {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 1000;
+    background-color: #eeeeee;
+    padding: 8px;
+    max-height: 100%;
+    overflow-y: auto;
+    border-left: 1px solid black;
+    border-bottom: 1px solid black;
+}
+.catalog-list {
+    display: none;
+    flex-direction: column;
+
+    width: fit-content;
+    background-color: #eeeeee;
+}
+.catalog-button:hover .catalog-list {
+    display: flex;
+}

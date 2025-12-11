@@ -26,3 +26,29 @@ for (let i = 0; i < flash_links.length; i++) {
         }, 2000);
     });
 }
+
+document.body.insertAdjacentHTML('beforeend', `
+    <div>
+        <div class="catalog-button">
+            Catalog
+            <div class="catalog-list"></div>
+        </div>
+    </div>
+`);
+
+let list = document.querySelectorAll('.section-title');
+let ul = document.querySelector('.catalog-list');
+list.forEach(function(item) {
+    let link = document.createElement('a');
+    link.href = 'javascript:void(0)'
+    link.textContent = item.textContent;
+    link.onclick = function() {
+        let element = item;
+        let parent = element.parentElement;
+        if (parent.tagName !== 'SECTION') {
+            parent = element;
+        }
+        parent.scrollIntoView();
+    }
+    ul.appendChild(link);
+});

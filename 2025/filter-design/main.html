@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>滤波器设计学习</title>
     <link rel="stylesheet" href="../../main.css">
-    <link rel="stylesheet" href="../../mulu.css">
     <!-- math -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <!-- code -->
@@ -19,640 +18,712 @@
 <body>
     <div>
         <a href="../../index.html">back</a>
-        <button class="mulu-button">隐藏目录</button>
+        <b>滤波器设计</b>
         <hr>
     </div>
-    <div class="mulu_container">
-        <div></div>
-        <div>
-            <h1 class="mulu-title">滤波器设计学习</h1>
-            <p class="frame"><b>注意</b> 我不会讨论有关任何底层原理，如有需要请自己搜索相关内容。</p>
-            <div class="frame">
-                <h3>双二阶滤波器(Biquad)</h3>
-                <p>高阶的直接传递函数型设计的滤波器很容易受到精度影响，这会导致极点和零点漂移，甚至跑到单位圆外面导致不稳定，以及超高的量化噪声。</p>
-                <p>级联形式的双二阶滤波器受到的影响较低，然而在极低频下也会受到精度影响出现上述情况，这不影响它仍然是最流行的滤波器。</p>
-                <img class="centered_img" src="biquad.webp"
-                    alt="https://cn.bing.com/images/search?view=detailV2&ccid=IpGI3MBp&id=A18CF3082EFEC32870548D441CFC0379ED4A055C&thid=OIP.IpGI3MBpeMF84wLyPzz9PwHaEC&mediaurl=https%3A%2F%2Fts1.tc.mm.bing.net%2Fth%2Fid%2FR-C.229188dcc06978c17ce302f23f3cfd3f%3Frik%3DXAVK7XkD%252fBxEjQ%26riu%3Dhttp%253a%252f%252fwww.minidsp.com%252fimages%252fstories%252fapplications%252fbiquad.jpg%26ehk%3DIPZqMGi6UVBIRfMFVr5yFLiq6WQwxWDYucOcsUDWYwM%253d%26risl%3D%26pid%3DImgRaw%26r%3D0&exph=341&expw=626&q=biquad&simid=607988394707994238&FORM=IRPRST&ck=9B234C5368668FDD716EB1B0C1F2D949&selectedIndex=1&itb=0&cw=1296&ch=665&ajaxhist=0&ajaxserp=0">
-                <p class="centered">I 型Biuqad滤波器</p>
-                <p>I 型Biqad滤波器适合定点任务，因为其中只有一个累加器。</p>
-                <p>对于浮点数而言，转置II型是最好的选择</p>
-                <img src="tp2-biquad.gif" alt="tp2-biquad">
-                <p class="centered"><a href="https://www.earlevel.com/main/2003/02/28/biquads/">转置II型biquad滤波器</a></p>
-                <hr>
-                <p>一个biquad滤波器可以表示一对共轭零点和一对共轭极点，在接下来的计算中我都会忽略类型中的共轭复数。</p>
-                <p>从传递函数的ZPK表示开始，Z=零点，P=极点，K=增益。</p>
-                <pre>
-            <code>
-            struct ZPK {
-                double k;
-                std::optional&ltstd::complex&ltdouble>>> z; // 如果Null则在无穷远处
-                std::complex&ltdouble> p;
-            
-                std::complex&ltdouble> GetAnalogResponce(double omega) const {
-                    auto s = std::complex{0.0, omega};
-                    if (z) {
-                        auto up = (s - *z) * (s - std::conj(*z));
-                        auto down = (s - p) * (s - std::conj(p));
-                        return up * k / down;
-                    }
-                    else {
-                        auto up = k;
-                        auto down = (s - p) * (s - std::conj(p));
-                        return up / down;
-                    }
-                }
-            };
-            </code>
-                    </pre>
-                <div class="frame">
-                    <p>
-                        \[H(s)=k*\frac{(s-\epsilon)(s-\bar{\epsilon})}{(s-p)(s-\bar{p})}\]
-                    </p>
-                    <p class="centered">一个ZPK传递函数</p>
-                    <p>
-                        \[H(s)=k*\frac{1}{(s-p)(s-\bar{p})}\]
-                    </p>
-                    <p class="centered">只有极点的ZPK传递函数</p>
-                </div>
-                <p>如上式所示，p^是指p的共轭复数，ε^s是指ε的共轭复数。它们描述了连续滤波器传递函数中的零点和极点。在代码中，分子为1时零点将记作std::nullopt。</p>
-            </div>
-            <div class="frame">
-                <h3 class="no_warp">原型巴特沃斯</h3>
-                <a
-                    href="https://www.analog.com/media/en/training-seminars/design-handbooks/Basic-Linear-Design/Chapter8.pdf">Analog
-                    Filter Chapter8</a>
-                <p id="link-butter-poles">原型巴特沃斯滤波器是纯极点滤波器，其极点分布在单位圆上(w=1)</p>
-                <img src="butter-poles.png" alt="butter-poles">
-                <p>一个更清晰明了的分布如下图所示</p>
-                <img src="buterr-full-poles.png" alt="buterr-full-poles">
-                <p class="centered">巴特沃斯的极点分布</p>
-                <p>右半平面的极点是不需要的，它们会导致滤波器不稳定（瞬态响应无限放大），去除之后的极点图如下所示</p>
-                <img src="buterr-half-poles.png" alt="buterr-half-poles">
-                <p>通过<a class="flash-link" href="#link-butter-poles">这里的公式</a>可以编写以下代码求解极点，注意，省略了另一个共轭极点。</p>
-                <pre>
-            <code>
-            std::vector&ltZPK> Butterworth(int num_filter) {
-                std::vector&ltZPK> ret{static_cast&ltsize_t>(num_filter)};
-            
-                int n = 2 * num_filter;
-                int i = 0;
-                for (int k = 1; k <= num_filter; ++k) {
-                    double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
-                    ret[i].k = 1.0;
-                    ret[i].p = std::complex{-std::sin(phi), std::cos(phi)};
-                    ++i;
-                }
-            
-                return ret;
-            }
-            </code>
-                    </pre>
-                <p>一个biquad有着一对共轭极点，所以n = 2 * num_filter，由于没有零点，zpk::p默认初始化为nullopt。</p>
-                <p>使用以上的zpk，我们将得到一个|H(1j)| = -3dB的低通滤波器。</p>
-                <img src="pzmap-analog-butter.png" alt="pzmap-analog-butter">
-                <p class="centered">生成的极点分布</p>
-                <img src="bode-butter.png" alt="bode-butter">
-                <p class="centered">振幅响应，截止w = 1</p>
-            </div>
-            <div class="frame">
-                <h3 class="no_warp">双线性映射</h3><a
-                    href="https://en.wikipedia.org/wiki/Bilinear_transform">wikipedia</a><br>
-                <p>好吧，我们先暂时跳过其他滤波器和连续滤波器映射，先来验证我们的代码。</p>
-                <p>首先，我使用的是ZPK形式的传递函数，基本上它可以写成这样表示</p>
-                <p>
-                    \[ZPK\space\space\space H_{n}(s)=K_{n}\frac{(s-\epsilon)(s-\bar{\epsilon})}{(s-p)(s-\bar{p})}\]
-                </p>
-                <p>
-                    \[H_{filter}(s)=H_{0}(s)*H_{1}(s)*H_{2}(s)......\]
-                </p>
-                <p class="centered">传递函数由许多单个ZPK相乘，对应滤波器的级联</p>
-                <p>为了从连续传递函数H(s)获取离散传递函数H(z)，我使用双线性变换进行离散化。</p>
-                <img src="bilinear-s-z.png" alt="bilinear-s-z">
-                <p class="centered">双线性变换用z代替s</p>
-                <p>通过将上述变换代入H(s)，上述式子将会代替原有ZPK中的所有s,从而得到一个由z组成的ZPK传递函数</p>
-                <div class="frame">
-                    <p>
-                        \[k=2*采样率=\frac{2}{T}\]
-                    </p>
-                    <p>
-                        \[H(s)=\frac{(s-\epsilon)(s-\bar{\epsilon})}{(s-p)(s-\bar{p})}*K_{f}\]
-                    </p>
-                    <p>
-                        \begin{equation}\begin{aligned}
-                        H(z)&=\frac{(k\frac{z-1}{z+1}-\epsilon)(k\frac{z-1}{z+1}-\bar{\epsilon})}{(k\frac{z-1}{z+1}-p)(k\frac{z-1}{z+1}-\bar{p})}*K_{f}
-                        \\&=
-                        \boxed{\frac{(z-\frac{k+\epsilon}{k-\epsilon})(z-\frac{k+\bar{\epsilon}}{k-\bar{\epsilon}})}{(z-\frac{k+p}{k-p})(z-\frac{k+\bar{p}}{k-\bar{p}})}}
-                        * \boxed{\frac{(k-\epsilon)(k-\bar{\epsilon})}{(k-p)(k-\bar{p})}*K_{f}}
-                        \end{aligned}\end{equation}
-                    </p>
-                </div>
-                <div class="frame">
-                    <p>
-                        \[k=2*采样率=\frac{2}{T}\]
-                    </p>
-                    <p>
-                        \[H(s)=\frac{1}{(s-p)(s-\bar{p})}*K_{f}\]
-                    </p>
-                    <p>
-                        \begin{equation}\begin{aligned}
-                        H(z)&=\frac{1}{(k\frac{z-1}{z+1}-p)(k\frac{z-1}{z+1}-\bar{p})}*K_{f} \\&=
-                        \boxed{\frac{(z+1)(z+1)}{(z-\frac{k+p}{k-p})(z-\frac{k+\bar{p}}{k-\bar{p}})}} *
-                        \boxed{\frac{K_{f}}{(k-p)(k-\bar{p})}} \end{aligned}\end{equation}
-                    </p>
-                </div>
-                <p>如上公式所示，前面的部分为零点和极点，后面的部分为增益，不加证明，新的到的零点和极点也是共轭的，因此我们只保留一个，从而写出以下代码</p>
-                <pre>
-            <code>
-            std::vector&ltZPK> Bilinear(const std::vector&ltZPK>& analog, double fs) {
-                std::vector&ltZPK> ret{analog.size()};
-            
-                std::complex k = 2.0 * fs;
-                int num_filter = static_cast&ltint>(analog.size());
-                for (int i = 0; i < num_filter; ++i) {
-                    const ZPK& s = analog[i];
-                    ZPK& z = ret[i];
-                    if (s.z) {
-                        z.p = (k + s.p) / (k - s.p);
-                        z.z = (k + *s.z) / (k - *s.z);
-                        z.k = s.k * std::real((k - *s.z) * (k - std::conj(*s.z)) / (k - s.p) / (k - std::conj(s.p)));
-                    }
-                    else {
-                        z.p = (k + s.p) / (k - s.p);
-                        z.z = -1;
-                        z.k = s.k / std::real((k - s.p) * (k - std::conj(s.p)));
-                    }
-                }
-            
-                return ret;
-            }
-            </code>
-                    </pre>
-                    <img src="pzmap-bilinear-butter.png" alt="pzmap-bilinear-butter">
-                    <p class="centered">双线性变换之后的零极点</p>
-                    <img src="bode-bilinear-butter.png" alt="bode-bilinear-butter">
-                    <p class="centered">数字滤波器的振幅响应</p>
-            </div>
-            <div class="frame">
-                <h3>离散ZPK到biquad</h3>
-                <p>好的，我们已经完成了离散化这一步并得到了离散的ZPK，接下来需要将ZPK转换为biquad</p>
-                <div class="frame">
-                    <p>
-                        \[ H(z)=\frac{b_{0}z^{2}+b_{1}z^{1}+b_{2}z}{z^{2}+a_{1}z+a_{2}} \]
-                    </p>
-                    <p class="centered">一个biquad传递函数</p>
-                </div>
-                <div class="frame">
-                    <pre>
-            <code>
-            struct Biquad {
-                double a1;
-                double a2;
-                double b0;
-                double b1;
-                double b2;
-            
-                std::complex&ltdouble> GetResponce(double omega) const {
-                    auto z = std::polar(1.0, omega);
-                    auto up = b0 * z * z + b1 * z + b2;
-                    auto down = z * z + a1 * z + a2;
-                    return up / down;
-                }
-            };
-            </code>
-                        </pre>
-                    <p class="centered">一个简单biquad结构体</p>
-                </div>
-                <div class="frame">
-                    <p>
-                        \begin{equation}\begin{aligned}
-                        H(z)&=\frac{(z-\epsilon)(z-\bar{\epsilon})}{(z-p)(z-\bar{p})}*K_{f} \\
-                        &=\frac{K_{f}z^{2}-2Re\{\epsilon\}K_{f}z+\epsilon\bar{\epsilon}K_{f}}{z^{2}-2Re\{p\}+p\bar{p}}
-                        \end{aligned}\end{equation}
-                    </p>
-                    <p class="centered">一个离散ZPK</p>
-                </div>
-                <p>根据上述两个公式，很容易就能推导出biquad中各个参数的计算，因此我们可以写下以下代码</p>
-                <pre>
-            <code>
-            std::vector&ltBiquad> TfToBiquad(const std::vector&ltZPK>& digital) {
-                std::vector&ltBiquad> ret{digital.size()};
-            
-                size_t num_filter = digital.size();
-                for (size_t i = 0; i < num_filter; ++i) {
-                    const auto& z = digital[i];
-                    auto& biquad = ret[i];
-                    biquad.b0 = z.k;
-                    biquad.b1 = -z.k * 2.0 * std::real(*z.z);
-                    biquad.b2 = z.k * std::norm(*z.z);
-                    biquad.a1 = -2.0 * std::real(z.p);
-                    biquad.a2 = std::norm(z.p);
-                }
-            
-                return ret;
-            }
-            </code>
-                    </pre>
-            </div>
-            <div class="frame">
-                <h3>切比雪夫I型</h3>
-                <p>切比雪夫I型也是纯极点滤波器，它的极点分布类似于一个沿实数轴压缩的椭圆（相对于巴特沃斯来说）。</p>
-                <img src="cheb1-poles.png" alt="cheb1-poles">
-                <p class="centered">Analog Filter翻译文本</p>
-                <pre>
-            <code>
-            std::vector&ltZPK> Chebyshev1(int num_filter, double ripple) {
-                std::vector&ltZPK> ret{static_cast&ltsize_t>(num_filter)};
-            
-                int n = 2 * num_filter;
-                int i = 0;
-                double eps = std::sqrt(std::pow(10.0, ripple / 10.0) - 1.0);
-                double A = 1.0 / n * std::asinh(1.0 / eps);
-                double k_re = std::sinh(A);
-                double k_im = std::cosh(A);
-                for (int k = 1; k <= num_filter; ++k) {
-                    double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
-                    ret[i].p = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
-                    ret[i].k = std::norm(ret[i].p);
-                    ++i;
-                }
-                // 切比雪夫I型在DC处的增益, s = 0, 给到第一个滤波器
-                ret.front().k /= std::sqrt(1.0f + eps * eps);
-            
-                return ret;
-            }
-            </code>
-                    </pre>
-                <p>我没有使用最末尾那个-3dB的acosh计算，而是asinh，因为它表现的振幅响应不正确。</p>
-                <p>偶数的切比雪夫I型在DC处为</p>
-                <p>
-                    \[\sqrt{1+\epsilon^{2}}\]
-                </p>
-                <p>奇数的为0，我们这里没有考虑奇数极点数的切比雪夫，所以让第一个滤波器的K除以DC处的增益。</p>
-                <p>ZPK中的K为零极点在DC处产生的增益倒数，目标是让滤波器的DC增益为1。</p>
-                <p class="frame"><b>注意</b> 这里还需要进一步优化，让w=1处于-3dB，而且涟漪不能超过0dB.</p>
-                <img src="pzmap-analog-cheb1.png" alt="pzmap-analog-cheb1">
-                <p class="centered">切比雪夫I型原型零极点</p>
-                <img src="bode-cheb1.png" alt="bode-cheb1">
-                <p class="centered">切比雪夫I型振幅响应</p>
-            </div>
-            <div class="frame">
-                <h3 class="no_warp">切比雪夫II型</h3><a
-                    href="https://en.wikipedia.org/wiki/Chebyshev_filter#Type_II_Chebyshev_filters_(inverse_Chebyshev_filters)">wikipedia</a><br>
-                <p>切比雪夫II型存在零点，如下图所示给出了零点极点的计算方式</p>
-                <img src="cheb2-poles.png" alt="cheb2-poles">
-                <p class="centered">wikipedia的零极点计算</p>
-                <img src="cheb2-ripple.png" alt="cheb2-ripple">
-                <p class="centered">wikipedia的涟漪幅度计算，y是正数（如想要-40dB,y=40）</p>
-                <p>直接使用这些计算公式不会使得w=1rad/sec的位置为-3dB，可以计算出真正-3dB位置的频率</p>
-                <img src="cheb2-correct-freq.png" alt="cheb2-correct-freq">
-                <p class="centered">-3dB真正的位置</p>
-                <p>将w=1代入得到的fH即为正确位置，在连续域我们仅需缩放零点极点(乘以fH)即可纠正原型的频率</p>
-                <pre>
-            <code>
-            std::vector&ltZPK> Chebyshev2(int num_filter, double ripple) {
-                std::vector&ltZPK> ret{static_cast&ltsize_t>(num_filter)};
-            
-                int n = 2 * num_filter;
-                int i = 0;
-                double eps = 1.0 / std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0);
-                double A = 1.0 / n * std::asinh(1.0 / eps);
-                double scale = 1.0 / std::cosh(std::acosh(std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0)) / n);
-                double k_re = std::sinh(A) * scale;
-                double k_im = std::cosh(A) * scale;
-                for (int k = 1; k <= num_filter; ++k) {
-                    double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
-                    ret[i].z = 1.0 / std::complex{0.0, std::cos(phi) * scale};
-                    ret[i].p = 1.0 / std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
-                    ret[i].k = std::norm(ret[i].p) / std::norm(*ret[i].z);
-                    ++i;
-                }
-            
-                return ret;
-            }
-            </code>
-                    </pre>
-                <p>ZPK中的K为零极点在DC处产生的增益倒数，目标是让滤波器的DC增益为1。</p>
-                <p class="frame"><b>注意</b> 这里的滤波器没有做到在w=1处为-3dB，你可能需要使用频率求解函数来计算真正的wc</p>
-                <img src="pzmap-analog-cheb2.png" alt="pzmap-analog-cheb2">
-                <p class="centered">切比雪夫II型原型零极点</p>
-                <img src="bode-cheb2.png" alt="bode-cheb2">
-                <p class="centered">切比雪夫II型原型振幅响应</p>
-            </div>
-            <div class="frame">
-                <h3>连续滤波器映射</h3>
-                <div class="frame">
-                    <h4>原型到低通</h4>
-                    <p>为了将原型低通滤波器映射到低通滤波器，我们只需要拉伸频率轴即可。</p>
-                    <p>
-                        \[s\xleftarrow[]{}\frac{s}{w_{c}}\]
-                    </p>
-                    <p>
-                        \begin{equation}\begin{aligned}
-                        H(\frac{s}{w_c})&=\frac{(\frac{s}{w_c}-\epsilon)(\frac{s}{w_c}-\bar{\epsilon})}{(\frac{s}{w_c}-p)(\frac{s}{w_c}-\bar{p})}*K_f
-                        \\ &= \frac{(s-w_c\epsilon)(s-w_c\bar{\epsilon})}{(s-w_cp)(s-w_c\bar{p})}*K_f
-                        \end{aligned}\end{equation}
-                    </p>
-                    <p>
-                        \begin{equation}\begin{aligned}
-                        H(\frac{s}{w_c})&=\frac{K_f}{(\frac{s}{w_c}-p)(\frac{s}{w_c}-\bar{p})} \\ &=
-                        \frac{K_f*w_c^{2}}{(s-w_cp)(s-w_c\bar{p})} \end{aligned}\end{equation}
-                    </p>
-                    <p>通过上面两个公式，我们很快可以写出计算映射之后的零点极点以及增益，从而写出以下代码</p>
-                    <pre>
-            <code>
-            std::vector&ltZPK> ProtyleToLowpass(const std::vector<ZPK>& analog, double cutoff_freq) {
-                std::vector&ltZPK> ret{analog.size()};
-                double omega = cutoff_freq * pi * 2.0;
-                for (size_t i = 0; i < analog.size(); ++i) {
-                    const auto& s = analog[i];
-                    auto& lps = ret[i];
-                    lps.k = s.k * omega * omega;
-                    lps.p = ScaleComplex(s.p, omega);
-                    if (s.z) {
-                        lps.z = ScaleComplex(*s.z, omega);
-                        lps.k = s.k;
-                    }
-                }
-                return ret;
-            }
-            </code>
-                        </pre>
-                        <img src="lowpass/pzmap-butter-lowpass.png" alt="pzmap-butter-lowpass">
-                        <p class="centered">10hz, 20hz FS巴特沃斯零极点</p>
-                        <img src="lowpass/bode-butter-lowpass.png" alt="bode-butter-lowpass">
-                        <p class="centered">10hz, 20hz FS巴特沃斯振幅响应</p>
-                        <img src="lowpass/pzmap-cheb1-lowpass.png" alt="pzmap-cheb1-lowpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫I零极点</p>
-                        <img src="lowpass/bode-cheb1-lowpass.png" alt="bode-cheb1-lowpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫I振幅响应</p>
-                        <img src="lowpass/pzmap-cheb2-lowpass.png" alt="pzmap-cheb2-lowpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
-                        <img src="lowpass/bode-cheb2-lowpass.png" alt="bode-cheb2-lowpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫II振幅响应</p>
-                </div>
-                <div class="frame">
-                    <h4>原型到高通</h4>
-                    <p>
-                        \[s\xleftarrow[]{}\frac{w_{c}}{s}\]
-                    </p>
-                    <p>
-                        \begin{equation}\begin{aligned} H(\frac{w_c}{s}) &=
-                        \frac{(\frac{w_c}{s}-\epsilon)(\frac{w_c}{s}-\bar{\epsilon})}{(\frac{w_c}{s}-p)(\frac{w_c}{s}-\bar{p})}*K_f
-                        \\ &=
-                        \frac{(\frac{w_c}{\epsilon}-s)(\frac{w_c}{\bar{\epsilon}}-s)}{(\frac{w_c}{p}-s)(\frac{w_c}{\bar{p}}-s)}*\frac{\epsilon\bar{\epsilon}*K_f}{p\bar{p}}
-                        \\ &=
-                        \frac{(s-\frac{w_c}{\epsilon})(s-\frac{w_c}{\bar{\epsilon}})}{(s-\frac{w_c}{p})(s-\frac{w_c}{\bar{p}})}*\frac{\epsilon\bar{\epsilon}*K_f}{p\bar{p}}
-                        \end{aligned}\end{equation}
-                    </p>
-                    <p>
-                        \begin{equation}\begin{aligned} H(\frac{w_c}{s}) &=
-                        \frac{K_f}{(\frac{w_c}{s}-p)(\frac{w_c}{s}-p)} \\&=
-                        \frac{(s-0)^2}{(s-\frac{w_c}{p})(s-\frac{w_c}{\bar{p}})}*\frac{K_f}{p\bar{p}}
-                        \end{aligned}\end{equation}
-                    </p>
-                    <p>这样我们获得了映射之后的零极点</p>
-                    <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
-                    <pre>
-            <code>
-            std::vector<ZPK> ProtyleToHighpass(const std::vector<ZPK>& protyle, double cutoff_freq) {
-                std::vector<ZPK> ret{protyle.size()};
-                double omega = cutoff_freq * 2 * pi;
-                for (size_t i = 0; i < protyle.size(); ++i) {
-                    const auto& s = protyle[i];
-                    auto& hps = ret[i];
-                    hps.k = s.k / std::norm(s.p);
-                    hps.p = omega / s.p;
-                    if (s.z) {
-                        hps.k *= std::norm(*s.z);
-                        hps.z = omega / *s.z;
-                    }
-                    else {
-                        hps.z = 0;
-                    }
-                }
-                return ret;
-            }
-            </code>
-                        </pre>
-                        <img src="highpass/pzmap-butter-highpass.png" alt="pzmap-butter-highpass">
-                        <p class="centered">10hz, 20hz FS巴特沃斯零极点</p>
-                        <img src="highpass/bode-butter-highpass.png" alt="bode-butter-highpass">
-                        <p class="centered">10hz, 20hz FS巴特沃斯振幅响应</p>
-                        <img src="highpass/pzmap-cheb1-highpass.png" alt="pzmap-cheb1-highpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫I零极点</p>
-                        <img src="highpass/bode-cheb1-highpass.png" alt="bode-cheb1-highpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫I振幅响应</p>
-                        <img src="highpass/pzmap-cheb2-highpass.png" alt="pzmap-cheb2-highpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
-                        <img src="highpass/bode-cheb2-highpass.png" alt="bode-cheb2-highpass">
-                        <p class="centered">10hz, 20hz FS切比雪夫II振幅响应</p>
-                </div>
-                <div class="frame">
-                    <h4>原型到带通</h4>
-                    <p>带通滤波器有两个参数，它们有着许多的组合，在这里我使用截止频率wc和Q作为参数。</p>
-                    <p>
-                        \[Q=\frac{w_c}{bw} \xrightarrow[]{} bw=\frac{w_c}{Q} \]
-                    </p>
-                    <p>第一步我们先映射一个截止频率位于bw的低通滤波器</p>
-                    <p>
-                        \[s\xleftarrow[]{}\frac{s}{bw}\]
-                    </p>
-                    <p>我们在上面已经推导了低通映射的ZPK，在此不重复。</p>
-                    <p>第二部使用下面的映射函数将低通变为带通，中心频率为wc</p>
-                    <p>
-                        \[s\xleftarrow[]{}\frac{s^{2}+w_{c}^2}{s}\]
-                    </p>
-                    <p>在这里展开H(s)的过程实在是太长了，因此我只写结论</p>
-                    <p>
-                        \begin{equation}\begin{aligned}
-                        H(\frac{s^{2}+wc^{2}}{s})&=\frac{(s^{2}-s\epsilon+w_c^{2})(s^{2}-s\bar{\epsilon}+w_c^{2})}{(s^{2}-sp+w_c^{2})(s^{2}-s\bar{p}+w_c^{2})}*K_f
-                        \end{aligned}\end{equation}
-                    </p>
-                    <p>
-                        \begin{equation}\begin{aligned}
-                        H(\frac{s^{2}+wc^{2}}{s})&=\frac{(s-0)^{2}}{(s^{2}-sp+w_c^{2})(s^{2}-s\bar{p}+w_c^{2})}*K_f
-                        \end{aligned}\end{equation}
-                    </p>
-                    <p>
-                        这里我们使用二次方程的通项公式对四个方程直接进行求解，由于它们都有相同的形式，在此用下列方程代替
-                    </p>
-                    <p>
-                        \[ s^{2}-s*c+w_c^{2}=0 \]
-                    </p>
-                    <p>
-                        \[ Root_0(c)=\frac{c+\sqrt{c^{2}-4w_c^{4}}}{2} \space\space\space\space
-                        Root_1(c)=\frac{c-\sqrt{c^{2}-4w_c^{2}}}{2} \]
-                    </p>
-                    <p>通过一些小小的验证，我们足以发现以下关系</p>
-                    <p>
-                        \[ Root_0(c)与Root_0(\bar{c})是共轭复数，对Root_1也是如此 \]
-                    </p>
-                    <p>
-                        \[ 即Root_0(c)的共轭复数是\overline{Root_0(\bar{c})} \]
-                    </p>
-                    <p>因此我们得到以下公式</p>
-                    <p>
-                        \[
-                        H(s)=\frac{(s-Root_0(\epsilon))(s-Root_1(\epsilon))(s-\overline{Root_0(\epsilon)})(s-\overline{Root_1(\epsilon)})}{(s-Root_0(p))(s-Root_1(p))(s-\overline{Root_0(p)})(s-\overline{Root_1(p)})}*K_f
-                        \]
-                    </p>
-                    <p>
-                        \[
-                        H(s)=\frac{(s-0)^{2}}{(s-Root_0(p))(s-Root_1(p))(s-\overline{Root_0(p)})(s-\overline{Root_1(p)})}*K_f
-                        \]
-                    </p>
-                    <p><b>注意</b> 由于我们在将一个ZPK拆成两个ZPK，由上面的公式可以看出Kf是不变的，为了保持ZPK*ZPK的K不变，拆除的ZPK的K应该为原来ZPk的K的开平方。</p>
-                    <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
-                    <p>由此写下以下代码</p>
-                    <pre>
-            <code>
-                std::vector&ltZPK> ProtyleToBandpass(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
-                    double wo = fcutoff * 2 * pi;
-                    double bw = wo / Q;
-                    std::vector&ltZPK> ret{protyle.size() * 2};
-                    for (size_t i = 0; i < protyle.size(); ++i) {
-                        // prototype -> lowpass at bw
-                        ZPK s;
-                        {
-                            auto const& ss = protyle[i];
-                            s.k = ss.k * bw * bw;
-                            s.p = ScaleComplex(ss.p, bw);
-                            if (ss.z) {
-                                s.k = ss.k;
-                                s.z = ScaleComplex(*ss.z, bw);
-                            }
-                        }
-                        // lowpass -> bandpass
-                        auto& bp1 = ret[2 * i];
-                        auto& bp2 = ret[2 * i + 1];
-                        if (s.z) {
-                            auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
-                            auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
-                            bp1.p = ScaleComplex(s.p + p_delta, 0.5);
-                            bp2.p = ScaleComplex(s.p - p_delta, 0.5);
-                            bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
-                            bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
-                            bp1.k = std::sqrt(s.k);
-                            bp2.k = std::sqrt(s.k);
-                        }
-                        else {
-                            auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
-                            bp1.p = ScaleComplex(s.p + delta, 0.5);
-                            bp2.p = ScaleComplex(s.p - delta, 0.5);
-                            bp1.z = 0;
-                            bp1.k = std::sqrt(s.k);
-                            bp2.k = std::sqrt(s.k);
-                        }
-                    }
-                    return ret;
-                }
-            </code>
-                        </pre>
-                        <img src="bandpass/pzmap-butter.png" alt="pzmap-butter-bandpass">
-                        <p class="centered">10hz, Q=5, 20hz FS巴特沃斯零极点</p>
-                        <img src="bandpass/bode-butter.png" alt="bode-butter-bandpass">
-                        <p class="centered">10hz, Q=5, 20hz FS巴特沃斯振幅响应</p>
-                        <img src="bandpass/pzmap-cheb1.png" alt="pzmap-cheb1-bandpass">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫I零极点</p>
-                        <img src="bandpass/bode-cheb1.png" alt="bode-cheb1-bandpass">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫I振幅响应</p>
-                        <img src="bandpass/pzmap-cheb2.png" alt="pzmap-cheb2-bandpass">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
-                        <img src="bandpass/bode-cheb2.png" alt="bode-cheb2-bandpass">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II振幅响应</p>
-                </div>
-                <div class="frame">
-                    <h4>原型到带阻</h4>
-                    <p>和带通类似，首先我们映射一个高通滤波器</p>
-                    <p>
-                        \[s\xleftarrow[]{}\frac{bw}{s}\]
-                    </p>
-                    <p>然后我们可以使用带通的结论将高通滤波器映射为带阻滤波器</p>
-                    <p>
-                        \[s\xleftarrow[]{}\frac{s^{2}+w_{c}^2}{s}\]
-                    </p>
-                    <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
-                    <p>因此，我们可以写出以下代码</p>
-                    <pre>
-            <code>
-                std::vector&ltZPK> ProtyleToBandstop(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
-                    double wo = fcutoff * 2 * pi;
-                    double bw = wo / Q;
-                    std::vector&ltZPK> ret{protyle.size() * 2};
-                    for (size_t i = 0; i < protyle.size(); ++i) {
-                        // prototype -> highpass at bw
-                        ZPK s;
-                        {
-                            auto const& ss = protyle[i];
-                            s.k = ss.k / std::norm(ss.p);
-                            s.p = bw / ss.p;
-                            if (ss.z) {
-                                s.k *= std::norm(*ss.z);
-                                s.z = bw / *ss.z;
-                            }
-                            else {
-                                s.z = 0;
-                            }
-                        }
-                        // highpass -> bandstop
-                        auto& bp1 = ret[2 * i];
-                        auto& bp2 = ret[2 * i + 1];
-                        if (s.z) {
-                            auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
-                            auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
-                            bp1.p = ScaleComplex(s.p + p_delta, 0.5);
-                            bp2.p = ScaleComplex(s.p - p_delta, 0.5);
-                            bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
-                            bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
-                            bp1.k = std::sqrt(s.k);
-                            bp2.k = std::sqrt(s.k);
-                        }
-                        else {
-                            auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
-                            bp1.p = ScaleComplex(s.p + delta, 0.5);
-                            bp2.p = ScaleComplex(s.p - delta, 0.5);
-                            bp1.z = 0;
-                            bp1.k = std::sqrt(s.k);
-                            bp2.k = std::sqrt(s.k);
-                        }
-                    }
-                    return ret;
-                }
-            </code>
-                        </pre>
-                        <img src="bandstop/pzmap-butter.png" alt="pzmap-butter-bandstop">
-                        <p class="centered">10hz, Q=5, 20hz FS巴特沃斯零极点</p>
-                        <img src="bandstop/bode-butter.png" alt="bode-butter-bandstop">
-                        <p class="centered">10hz, Q=5, 20hz FS巴特沃斯振幅响应</p>
-                        <img src="bandstop/pzmap-cheb1.png" alt="pzmap-cheb1-bandstop">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫I零极点</p>
-                        <img src="bandstop/bode-cheb1.png" alt="bode-cheb1-bandstop">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫I振幅响应</p>
-                        <img src="bandstop/pzmap-cheb2.png" alt="pzmap-cheb2-bandstop">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
-                        <img src="bandstop/bode-cheb2.png" alt="bode-cheb2-bandstop">
-                        <p class="centered">10hz, Q=5, 20hz FS切比雪夫II振幅响应</p>
-                </div>
-            </div>
-        <section>
-            <h3 class="section-title">评论</h3>
-            <div class="section_content">
-                <script src="https://utteranc.es/client.js"
-                    repo="a5632645/a5632645.github.io"
-                    issue-term="pathname"
-                    theme="github-light"
-                    crossorigin="anonymous"
-                    async>
-                </script>
-            </div>
-        </section>
+
+    <section>
+        <h3 class="section-title">修改历史</h3>
+        <div class="section_content">
+            <table border="1">
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>2025-12-11</td>
+                    <td>TODO: adding new content</td>
+                </tr>
+                <tr>
+                    <td>2025-8-11</td>
+                    <td>修复了带通滤波器中的频率错误</td>
+                </tr>
+                <tr>
+                    <td>2025-8-2</td>
+                    <td>首次创建</td>
+                </tr>
+            </table>
         </div>
-    </div>
-    <div>
-        write in 2025-8-2, update in 2025-8-11
-    </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">双二阶滤波器(Biquad)</h3>
+        <div class="section_content">
+            <p>高阶的直接传递函数型设计的滤波器很容易受到精度影响，这会导致极点和零点漂移，甚至跑到单位圆外面导致不稳定，以及超高的量化噪声。</p>
+            <p>级联形式的双二阶滤波器受到的影响较低，然而在极低频下也会受到精度影响出现上述情况，这不影响它仍然是最流行的滤波器。</p>
+            <img class="centered_img" src="biquad.webp"
+                alt="https://cn.bing.com/images/search?view=detailV2&ccid=IpGI3MBp&id=A18CF3082EFEC32870548D441CFC0379ED4A055C&thid=OIP.IpGI3MBpeMF84wLyPzz9PwHaEC&mediaurl=https%3A%2F%2Fts1.tc.mm.bing.net%2Fth%2Fid%2FR-C.229188dcc06978c17ce302f23f3cfd3f%3Frik%3DXAVK7XkD%252fBxEjQ%26riu%3Dhttp%253a%252f%252fwww.minidsp.com%252fimages%252fstories%252fapplications%252fbiquad.jpg%26ehk%3DIPZqMGi6UVBIRfMFVr5yFLiq6WQwxWDYucOcsUDWYwM%253d%26risl%3D%26pid%3DImgRaw%26r%3D0&exph=341&expw=626&q=biquad&simid=607988394707994238&FORM=IRPRST&ck=9B234C5368668FDD716EB1B0C1F2D949&selectedIndex=1&itb=0&cw=1296&ch=665&ajaxhist=0&ajaxserp=0">
+            <p class="centered">I 型Biuqad滤波器</p>
+            <p>I 型Biqad滤波器适合定点任务，因为其中只有一个累加器。</p>
+            <p>对于浮点数而言，转置II型是最好的选择</p>
+            <img src="tp2-biquad.gif" alt="tp2-biquad">
+            <p class="centered"><a href="https://www.earlevel.com/main/2003/02/28/biquads/">转置II型biquad滤波器</a></p>
+            <hr>
+            <p>一个biquad滤波器可以表示一对共轭零点和一对共轭极点，在接下来的计算中我都会忽略类型中的共轭复数。</p>
+            <p>从传递函数的ZPK表示开始，Z=零点，P=极点，K=增益。</p>
+            <pre>
+                <code>
+struct ZPK {
+    double k;
+    std::optional&ltstd::complex&ltdouble>>> z; // 如果Null则在无穷远处
+    std::complex&ltdouble> p;
+
+    std::complex&ltdouble> GetAnalogResponce(double omega) const {
+        auto s = std::complex{0.0, omega};
+        if (z) {
+            auto up = (s - *z) * (s - std::conj(*z));
+            auto down = (s - p) * (s - std::conj(p));
+            return up * k / down;
+        }
+        else {
+            auto up = k;
+            auto down = (s - p) * (s - std::conj(p));
+            return up / down;
+        }
+    }
+};
+                </code>
+            </pre>
+            <p>\[H(s)=k*\frac{(s-\epsilon)(s-\bar{\epsilon})}{(s-p)(s-\bar{p})}\]</p>
+            <p class="centered">一个ZPK传递函数</p>
+            <p>\[H(s)=k*\frac{1}{(s-p)(s-\bar{p})}\]</p>
+            <p class="centered">只有极点的ZPK传递函数</p>
+            </div>
+            <p>如上式所示，p^是指p的共轭复数，ε^s是指ε的共轭复数。它们描述了连续滤波器传递函数中的零点和极点。在代码中，分子为1时零点将记作std::nullopt。</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">原型巴特沃斯</h3>
+        <div class="section_content">
+            <a
+                href="https://www.analog.com/media/en/training-seminars/design-handbooks/Basic-Linear-Design/Chapter8.pdf">Analog
+                Filter Chapter8</a>
+            <p id="link-butter-poles">原型巴特沃斯滤波器是纯极点滤波器，其极点分布在单位圆上(w=1)</p>
+            <img src="butter-poles.png" alt="butter-poles">
+            <p>一个更清晰明了的分布如下图所示</p>
+            <img src="buterr-full-poles.png" alt="buterr-full-poles">
+            <p class="centered">巴特沃斯的极点分布</p>
+            <p>右半平面的极点是不需要的，它们会导致滤波器不稳定（瞬态响应无限放大），去除之后的极点图如下所示</p>
+            <img src="buterr-half-poles.png" alt="buterr-half-poles">
+            <p>通过<a class="flash-link" href="#link-butter-poles">这里的公式</a>可以编写以下代码求解极点，注意，省略了另一个共轭极点。</p>
+            <pre>
+                <code>
+std::vector&ltZPK> Butterworth(int num_filter) {
+    std::vector&ltZPK> ret{static_cast&ltsize_t>(num_filter)};
+
+    int n = 2 * num_filter;
+    int i = 0;
+    for (int k = 1; k <= num_filter; ++k) {
+        double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
+        ret[i].k = 1.0;
+        ret[i].p = std::complex{-std::sin(phi), std::cos(phi)};
+        ++i;
+    }
+
+    return ret;
+}
+                </code>
+            </pre>
+            <p>一个biquad有着一对共轭极点，所以n = 2 * num_filter，由于没有零点，zpk::p默认初始化为nullopt。</p>
+            <p>使用以上的zpk，我们将得到一个|H(1j)| = -3dB的低通滤波器。</p>
+            <img src="pzmap-analog-butter.png" alt="pzmap-analog-butter">
+            <p class="centered">生成的极点分布</p>
+            <img src="bode-butter.png" alt="bode-butter">
+            <p class="centered">振幅响应，截止w = 1</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">双线性映射</h3>
+        <div class="section_content">
+            <a href="https://en.wikipedia.org/wiki/Bilinear_transform">wikipedia</a><br>
+            <p>好吧，我们先暂时跳过其他滤波器和连续滤波器映射，先来验证我们的代码。</p>
+            <p>首先，我使用的是ZPK形式的传递函数，基本上它可以写成这样表示</p>
+            <p>\[ZPK\space\space\space H_{n}(s)=K_{n}\frac{(s-\epsilon)(s-\bar{\epsilon})}{(s-p)(s-\bar{p})}\]</p>
+            <p>\[H_{filter}(s)=H_{0}(s)*H_{1}(s)*H_{2}(s)......\]</p>
+            <p class="centered">传递函数由许多单个ZPK相乘，对应滤波器的级联</p>
+            <p>为了从连续传递函数H(s)获取离散传递函数H(z)，我使用双线性变换进行离散化。</p>
+            <img src="bilinear-s-z.png" alt="bilinear-s-z">
+            <p class="centered">双线性变换用z代替s</p>
+            <p>通过将上述变换代入H(s)，上述式子将会代替原有ZPK中的所有s,从而得到一个由z组成的ZPK传递函数</p>
+            <p>\[k=2*采样率=\frac{2}{T}\]</p>
+            <p>\[H(s)=\frac{(s-\epsilon)(s-\bar{\epsilon})}{(s-p)(s-\bar{p})}*K_{f}\]</p>
+            <p>
+                \begin{equation}\begin{aligned}
+                H(z)&=\frac{(k\frac{z-1}{z+1}-\epsilon)(k\frac{z-1}{z+1}-\bar{\epsilon})}{(k\frac{z-1}{z+1}-p)(k\frac{z-1}{z+1}-\bar{p})}*K_{f}
+                \\&=
+                \boxed{\frac{(z-\frac{k+\epsilon}{k-\epsilon})(z-\frac{k+\bar{\epsilon}}{k-\bar{\epsilon}})}{(z-\frac{k+p}{k-p})(z-\frac{k+\bar{p}}{k-\bar{p}})}}
+                * \boxed{\frac{(k-\epsilon)(k-\bar{\epsilon})}{(k-p)(k-\bar{p})}*K_{f}}
+                \end{aligned}\end{equation}
+            </p>
+            <p>\[k=2*采样率=\frac{2}{T}\]</p>
+            <p>\[H(s)=\frac{1}{(s-p)(s-\bar{p})}*K_{f}\]</p>
+            <p>
+                \begin{equation}\begin{aligned}
+                H(z)&=\frac{1}{(k\frac{z-1}{z+1}-p)(k\frac{z-1}{z+1}-\bar{p})}*K_{f} \\&=
+                \boxed{\frac{(z+1)(z+1)}{(z-\frac{k+p}{k-p})(z-\frac{k+\bar{p}}{k-\bar{p}})}} *
+                \boxed{\frac{K_{f}}{(k-p)(k-\bar{p})}} \end{aligned}\end{equation}
+            </p>
+            <p>如上公式所示，前面的部分为零点和极点，后面的部分为增益，不加证明，新的到的零点和极点也是共轭的，因此我们只保留一个，从而写出以下代码</p>
+            <pre>
+                <code>
+std::vector&ltZPK> Bilinear(const std::vector&ltZPK>& analog, double fs) {
+    std::vector&ltZPK> ret{analog.size()};
+
+    std::complex k = 2.0 * fs;
+    int num_filter = static_cast&ltint>(analog.size());
+    for (int i = 0; i < num_filter; ++i) {
+        const ZPK& s = analog[i];
+        ZPK& z = ret[i];
+        if (s.z) {
+            z.p = (k + s.p) / (k - s.p);
+            z.z = (k + *s.z) / (k - *s.z);
+            z.k = s.k * std::real((k - *s.z) * (k - std::conj(*s.z)) / (k - s.p) / (k - std::conj(s.p)));
+        }
+        else {
+            z.p = (k + s.p) / (k - s.p);
+            z.z = -1;
+            z.k = s.k / std::real((k - s.p) * (k - std::conj(s.p)));
+        }
+    }
+
+    return ret;
+}
+                </code>
+            </pre>
+            <img src="pzmap-bilinear-butter.png" alt="pzmap-bilinear-butter">
+            <p class="centered">双线性变换之后的零极点</p>
+            <img src="bode-bilinear-butter.png" alt="bode-bilinear-butter">
+            <p class="centered">数字滤波器的振幅响应</p>
+            <hr>
+            <h3>离散ZPK到biquad</h3>
+            <p>好的，我们已经完成了离散化这一步并得到了离散的ZPK，接下来需要将ZPK转换为biquad</p>
+                <p>
+                    \[ H(z)=\frac{b_{0}z^{2}+b_{1}z^{1}+b_{2}z}{z^{2}+a_{1}z+a_{2}} \]
+                </p>
+                <p class="centered">一个biquad传递函数</p>
+            <pre>
+                <code>
+struct Biquad {
+    double a1;
+    double a2;
+    double b0;
+    double b1;
+    double b2;
+
+    std::complex&ltdouble> GetResponce(double omega) const {
+        auto z = std::polar(1.0, omega);
+        auto up = b0 * z * z + b1 * z + b2;
+        auto down = z * z + a1 * z + a2;
+        return up / down;
+    }
+};
+                </code>
+            </pre>
+            <p class="centered">一个简单biquad结构体</p>
+            <p>
+                \begin{equation}\begin{aligned}
+                H(z)&=\frac{(z-\epsilon)(z-\bar{\epsilon})}{(z-p)(z-\bar{p})}*K_{f} \\
+                &=\frac{K_{f}z^{2}-2Re\{\epsilon\}K_{f}z+\epsilon\bar{\epsilon}K_{f}}{z^{2}-2Re\{p\}+p\bar{p}}
+                \end{aligned}\end{equation}
+            </p>
+            <p class="centered">一个离散ZPK</p>
+            <p>根据上述两个公式，很容易就能推导出biquad中各个参数的计算，因此我们可以写下以下代码</p>
+            <pre>
+                <code>
+std::vector&ltBiquad> TfToBiquad(const std::vector&ltZPK>& digital) {
+    std::vector&ltBiquad> ret{digital.size()};
+
+    size_t num_filter = digital.size();
+    for (size_t i = 0; i < num_filter; ++i) {
+        const auto& z = digital[i];
+        auto& biquad = ret[i];
+        biquad.b0 = z.k;
+        biquad.b1 = -z.k * 2.0 * std::real(*z.z);
+        biquad.b2 = z.k * std::norm(*z.z);
+        biquad.a1 = -2.0 * std::real(z.p);
+        biquad.a2 = std::norm(z.p);
+    }
+
+    return ret;
+}
+                </code>
+            </pre>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">切比雪夫I型</h3>
+        <div class="section_content">
+            <p>切比雪夫I型也是纯极点滤波器，它的极点分布类似于一个沿实数轴压缩的椭圆（相对于巴特沃斯来说）。</p>
+            <img src="cheb1-poles.png" alt="cheb1-poles">
+            <p class="centered">Analog Filter翻译文本</p>
+            <pre>
+                <code>
+std::vector&ltZPK> Chebyshev1(int num_filter, double ripple) {
+    std::vector&ltZPK> ret{static_cast&ltsize_t>(num_filter)};
+
+    int n = 2 * num_filter;
+    int i = 0;
+    double eps = std::sqrt(std::pow(10.0, ripple / 10.0) - 1.0);
+    double A = 1.0 / n * std::asinh(1.0 / eps);
+    double k_re = std::sinh(A);
+    double k_im = std::cosh(A);
+    for (int k = 1; k <= num_filter; ++k) {
+        double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
+        ret[i].p = std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
+        ret[i].k = std::norm(ret[i].p);
+        ++i;
+    }
+    // 切比雪夫I型在DC处的增益, s = 0, 给到第一个滤波器
+    ret.front().k /= std::sqrt(1.0f + eps * eps);
+
+    return ret;
+}
+                </code>
+            </pre>
+            <p>我没有使用最末尾那个-3dB的acosh计算，而是asinh，因为它表现的振幅响应不正确。</p>
+            <p>偶数的切比雪夫I型在DC处为</p>
+            <p>
+                \[\sqrt{1+\epsilon^{2}}\]
+            </p>
+            <p>奇数的为0，我们这里没有考虑奇数极点数的切比雪夫，所以让第一个滤波器的K除以DC处的增益。</p>
+            <p>ZPK中的K为零极点在DC处产生的增益倒数，目标是让滤波器的DC增益为1。</p>
+            <p class="frame"><b>注意</b> 这里还需要进一步优化，让w=1处于-3dB，而且涟漪不能超过0dB.</p>
+            <img src="pzmap-analog-cheb1.png" alt="pzmap-analog-cheb1">
+            <p class="centered">切比雪夫I型原型零极点</p>
+            <img src="bode-cheb1.png" alt="bode-cheb1">
+            <p class="centered">切比雪夫I型振幅响应</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">切比雪夫II型</h3>
+        <div class="section_content">
+            <a href="https://en.wikipedia.org/wiki/Chebyshev_filter#Type_II_Chebyshev_filters_(inverse_Chebyshev_filters)">wikipedia</a><br>
+            <p>切比雪夫II型存在零点，如下图所示给出了零点极点的计算方式</p>
+            <img src="cheb2-poles.png" alt="cheb2-poles">
+            <p class="centered">wikipedia的零极点计算</p>
+            <img src="cheb2-ripple.png" alt="cheb2-ripple">
+            <p class="centered">wikipedia的涟漪幅度计算，y是正数（如想要-40dB,y=40）</p>
+            <p>直接使用这些计算公式不会使得w=1rad/sec的位置为-3dB，可以计算出真正-3dB位置的频率</p>
+            <img src="cheb2-correct-freq.png" alt="cheb2-correct-freq">
+            <p class="centered">-3dB真正的位置</p>
+            <p>将w=1代入得到的fH即为正确位置，在连续域我们仅需缩放零点极点(乘以fH)即可纠正原型的频率</p>
+            <pre>
+                <code>
+std::vector&ltZPK> Chebyshev2(int num_filter, double ripple) {
+    std::vector&ltZPK> ret{static_cast&ltsize_t>(num_filter)};
+
+    int n = 2 * num_filter;
+    int i = 0;
+    double eps = 1.0 / std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0);
+    double A = 1.0 / n * std::asinh(1.0 / eps);
+    double scale = 1.0 / std::cosh(std::acosh(std::sqrt(std::pow(10.0, -ripple / 10.0) - 1.0)) / n);
+    double k_re = std::sinh(A) * scale;
+    double k_im = std::cosh(A) * scale;
+    for (int k = 1; k <= num_filter; ++k) {
+        double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
+        ret[i].z = 1.0 / std::complex{0.0, std::cos(phi) * scale};
+        ret[i].p = 1.0 / std::complex{-std::sin(phi) * k_re, std::cos(phi) * k_im};
+        ret[i].k = std::norm(ret[i].p) / std::norm(*ret[i].z);
+        ++i;
+    }
+
+    return ret;
+}
+                </code>
+            </pre>
+            <p>ZPK中的K为零极点在DC处产生的增益倒数，目标是让滤波器的DC增益为1。</p>
+            <p class="frame"><b>注意</b> 这里的滤波器没有做到在w=1处为-3dB，你可能需要使用频率求解函数来计算真正的wc</p>
+            <img src="pzmap-analog-cheb2.png" alt="pzmap-analog-cheb2">
+            <p class="centered">切比雪夫II型原型零极点</p>
+            <img src="bode-cheb2.png" alt="bode-cheb2">
+            <p class="centered">切比雪夫II型原型振幅响应</p>
+        </div>
+    </section>
+
+    <h3 class="section-title">连续滤波器映射</h3>
+
+    <section>
+        <h3 class="section-title">原型到低通</h3>
+        <div class="section_content">
+            <p>为了将原型低通滤波器映射到低通滤波器，我们只需要拉伸频率轴即可。</p>
+            <p>\[s\xleftarrow[]{}\frac{s}{w_{c}}\]</p>
+            <p>
+                \begin{equation}\begin{aligned}
+                H(\frac{s}{w_c})&=\frac{(\frac{s}{w_c}-\epsilon)(\frac{s}{w_c}-\bar{\epsilon})}{(\frac{s}{w_c}-p)(\frac{s}{w_c}-\bar{p})}*K_f
+                \\ &= \frac{(s-w_c\epsilon)(s-w_c\bar{\epsilon})}{(s-w_cp)(s-w_c\bar{p})}*K_f
+                \end{aligned}\end{equation}
+            </p>
+            <p>
+                \begin{equation}\begin{aligned}
+                H(\frac{s}{w_c})&=\frac{K_f}{(\frac{s}{w_c}-p)(\frac{s}{w_c}-\bar{p})} \\ &=
+                \frac{K_f*w_c^{2}}{(s-w_cp)(s-w_c\bar{p})} \end{aligned}\end{equation}
+            </p>
+            <p>通过上面两个公式，我们很快可以写出计算映射之后的零点极点以及增益，从而写出以下代码</p>
+            <pre>
+                <code>
+std::vector&ltZPK> ProtyleToLowpass(const std::vector<ZPK>& analog, double cutoff_freq) {
+    std::vector&ltZPK> ret{analog.size()};
+    double omega = cutoff_freq * pi * 2.0;
+    for (size_t i = 0; i < analog.size(); ++i) {
+        const auto& s = analog[i];
+        auto& lps = ret[i];
+        lps.k = s.k * omega * omega;
+        lps.p = ScaleComplex(s.p, omega);
+        if (s.z) {
+            lps.z = ScaleComplex(*s.z, omega);
+            lps.k = s.k;
+        }
+    }
+    return ret;
+}
+                </code>
+            </pre>
+            <img src="lowpass/pzmap-butter-lowpass.png" alt="pzmap-butter-lowpass">
+            <p class="centered">10hz, 20hz FS巴特沃斯零极点</p>
+            <img src="lowpass/bode-butter-lowpass.png" alt="bode-butter-lowpass">
+            <p class="centered">10hz, 20hz FS巴特沃斯振幅响应</p>
+            <img src="lowpass/pzmap-cheb1-lowpass.png" alt="pzmap-cheb1-lowpass">
+            <p class="centered">10hz, 20hz FS切比雪夫I零极点</p>
+            <img src="lowpass/bode-cheb1-lowpass.png" alt="bode-cheb1-lowpass">
+            <p class="centered">10hz, 20hz FS切比雪夫I振幅响应</p>
+            <img src="lowpass/pzmap-cheb2-lowpass.png" alt="pzmap-cheb2-lowpass">
+            <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
+            <img src="lowpass/bode-cheb2-lowpass.png" alt="bode-cheb2-lowpass">
+            <p class="centered">10hz, 20hz FS切比雪夫II振幅响应</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">原型到高通</h3>
+        <div class="section_content">
+            <p>\[s\xleftarrow[]{}\frac{w_{c}}{s}\]</p>
+            <p>
+                \begin{equation}\begin{aligned} H(\frac{w_c}{s}) &=
+                \frac{(\frac{w_c}{s}-\epsilon)(\frac{w_c}{s}-\bar{\epsilon})}{(\frac{w_c}{s}-p)(\frac{w_c}{s}-\bar{p})}*K_f
+                \\ &=
+                \frac{(\frac{w_c}{\epsilon}-s)(\frac{w_c}{\bar{\epsilon}}-s)}{(\frac{w_c}{p}-s)(\frac{w_c}{\bar{p}}-s)}*\frac{\epsilon\bar{\epsilon}*K_f}{p\bar{p}}
+                \\ &=
+                \frac{(s-\frac{w_c}{\epsilon})(s-\frac{w_c}{\bar{\epsilon}})}{(s-\frac{w_c}{p})(s-\frac{w_c}{\bar{p}})}*\frac{\epsilon\bar{\epsilon}*K_f}{p\bar{p}}
+                \end{aligned}\end{equation}
+            </p>
+            <p>
+                \begin{equation}\begin{aligned} H(\frac{w_c}{s}) &=
+                \frac{K_f}{(\frac{w_c}{s}-p)(\frac{w_c}{s}-p)} \\&=
+                \frac{(s-0)^2}{(s-\frac{w_c}{p})(s-\frac{w_c}{\bar{p}})}*\frac{K_f}{p\bar{p}}
+                \end{aligned}\end{equation}
+            </p>
+            <p>这样我们获得了映射之后的零极点</p>
+            <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
+            <pre>
+                <code>
+    std::vector<ZPK> ProtyleToHighpass(const std::vector<ZPK>& protyle, double cutoff_freq) {
+    std::vector<ZPK> ret{protyle.size()};
+    double omega = cutoff_freq * 2 * pi;
+    for (size_t i = 0; i < protyle.size(); ++i) {
+        const auto& s = protyle[i];
+        auto& hps = ret[i];
+        hps.k = s.k / std::norm(s.p);
+        hps.p = omega / s.p;
+        if (s.z) {
+            hps.k *= std::norm(*s.z);
+            hps.z = omega / *s.z;
+        }
+        else {
+            hps.z = 0;
+        }
+    }
+    return ret;
+    }
+                </code>
+            </pre>
+            <img src="highpass/pzmap-butter-highpass.png" alt="pzmap-butter-highpass">
+            <p class="centered">10hz, 20hz FS巴特沃斯零极点</p>
+            <img src="highpass/bode-butter-highpass.png" alt="bode-butter-highpass">
+            <p class="centered">10hz, 20hz FS巴特沃斯振幅响应</p>
+            <img src="highpass/pzmap-cheb1-highpass.png" alt="pzmap-cheb1-highpass">
+            <p class="centered">10hz, 20hz FS切比雪夫I零极点</p>
+            <img src="highpass/bode-cheb1-highpass.png" alt="bode-cheb1-highpass">
+            <p class="centered">10hz, 20hz FS切比雪夫I振幅响应</p>
+            <img src="highpass/pzmap-cheb2-highpass.png" alt="pzmap-cheb2-highpass">
+            <p class="centered">10hz, 20hz FS切比雪夫II零极点</p>
+            <img src="highpass/bode-cheb2-highpass.png" alt="bode-cheb2-highpass">
+            <p class="centered">10hz, 20hz FS切比雪夫II振幅响应</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">原型到带通</h3>
+        <div class="section_content">
+            <p>带通滤波器有两个参数，它们有着许多的组合，在这里我使用截止频率wc和Q作为参数。</p>
+            <p>\[Q=\frac{w_c}{bw} \xrightarrow[]{} bw=\frac{w_c}{Q} \]</p>
+            <p>第一步我们先映射一个截止频率位于bw的低通滤波器</p>
+            <p>\[s\xleftarrow[]{}\frac{s}{bw}\]</p>
+            <p>我们在上面已经推导了低通映射的ZPK，在此不重复。</p>
+            <p>第二部使用下面的映射函数将低通变为带通，中心频率为wc</p>
+            <p>\[s\xleftarrow[]{}\frac{s^{2}+w_{c}^2}{s}\]</p>
+            <p>在这里展开H(s)的过程实在是太长了，因此我只写结论</p>
+            <p>
+                \begin{equation}\begin{aligned}
+                H(\frac{s^{2}+wc^{2}}{s})&=\frac{(s^{2}-s\epsilon+w_c^{2})(s^{2}-s\bar{\epsilon}+w_c^{2})}{(s^{2}-sp+w_c^{2})(s^{2}-s\bar{p}+w_c^{2})}*K_f
+                \end{aligned}\end{equation}
+            </p>
+            <p>
+                \begin{equation}\begin{aligned}
+                H(\frac{s^{2}+wc^{2}}{s})&=\frac{(s-0)^{2}}{(s^{2}-sp+w_c^{2})(s^{2}-s\bar{p}+w_c^{2})}*K_f
+                \end{aligned}\end{equation}
+            </p>
+            <p>这里我们使用二次方程的通项公式对四个方程直接进行求解，由于它们都有相同的形式，在此用下列方程代替</p>
+            <p>\[ s^{2}-s*c+w_c^{2}=0 \]</p>
+            <p>
+                \[ Root_0(c)=\frac{c+\sqrt{c^{2}-4w_c^{4}}}{2} \space\space\space\space
+                Root_1(c)=\frac{c-\sqrt{c^{2}-4w_c^{2}}}{2} \]
+            </p>
+            <p>通过一些小小的验证，我们足以发现以下关系</p>
+            <p>\[ Root_0(c)与Root_0(\bar{c})是共轭复数，对Root_1也是如此 \]</p>
+            <p>\[ 即Root_0(c)的共轭复数是\overline{Root_0(\bar{c})} \]</p>
+            <p>因此我们得到以下公式</p>
+            <p>
+                \[
+                H(s)=\frac{(s-Root_0(\epsilon))(s-Root_1(\epsilon))(s-\overline{Root_0(\epsilon)})(s-\overline{Root_1(\epsilon)})}{(s-Root_0(p))(s-Root_1(p))(s-\overline{Root_0(p)})(s-\overline{Root_1(p)})}*K_f
+                \]
+            </p>
+            <p>
+                \[
+                H(s)=\frac{(s-0)^{2}}{(s-Root_0(p))(s-Root_1(p))(s-\overline{Root_0(p)})(s-\overline{Root_1(p)})}*K_f
+                \]
+            </p>
+            <p><b>注意</b> 由于我们在将一个ZPK拆成两个ZPK，由上面的公式可以看出Kf是不变的，为了保持ZPK*ZPK的K不变，拆除的ZPK的K应该为原来ZPk的K的开平方。</p>
+            <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
+            <p>由此写下以下代码</p>
+            <pre>
+                <code>
+    std::vector&ltZPK> ProtyleToBandpass(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
+    double wo = fcutoff * 2 * pi;
+    double bw = wo / Q;
+    std::vector&ltZPK> ret{protyle.size() * 2};
+    for (size_t i = 0; i < protyle.size(); ++i) {
+        // prototype -> lowpass at bw
+        ZPK s;
+        {
+            auto const& ss = protyle[i];
+            s.k = ss.k * bw * bw;
+            s.p = ScaleComplex(ss.p, bw);
+            if (ss.z) {
+                s.k = ss.k;
+                s.z = ScaleComplex(*ss.z, bw);
+            }
+        }
+        // lowpass -> bandpass
+        auto& bp1 = ret[2 * i];
+        auto& bp2 = ret[2 * i + 1];
+        if (s.z) {
+            auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+            auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
+            bp1.p = ScaleComplex(s.p + p_delta, 0.5);
+            bp2.p = ScaleComplex(s.p - p_delta, 0.5);
+            bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
+            bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
+            bp1.k = std::sqrt(s.k);
+            bp2.k = std::sqrt(s.k);
+        }
+        else {
+            auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+            bp1.p = ScaleComplex(s.p + delta, 0.5);
+            bp2.p = ScaleComplex(s.p - delta, 0.5);
+            bp1.z = 0;
+            bp1.k = std::sqrt(s.k);
+            bp2.k = std::sqrt(s.k);
+        }
+    }
+    return ret;
+    }
+                </code>
+            </pre>
+            <img src="bandpass/pzmap-butter.png" alt="pzmap-butter-bandpass">
+            <p class="centered">10hz, Q=5, 20hz FS巴特沃斯零极点</p>
+            <img src="bandpass/bode-butter.png" alt="bode-butter-bandpass">
+            <p class="centered">10hz, Q=5, 20hz FS巴特沃斯振幅响应</p>
+            <img src="bandpass/pzmap-cheb1.png" alt="pzmap-cheb1-bandpass">
+            <p class="centered">10hz, Q=5, 20hz FS切比雪夫I零极点</p>
+            <img src="bandpass/bode-cheb1.png" alt="bode-cheb1-bandpass">
+            <p class="centered">10hz, Q=5, 20hz FS切比雪夫I振幅响应</p>
+            <img src="bandpass/pzmap-cheb2.png" alt="pzmap-cheb2-bandpass">
+            <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
+            <img src="bandpass/bode-cheb2.png" alt="bode-cheb2-bandpass">
+            <p class="centered">10hz, Q=5, 20hz FS切比雪夫II振幅响应</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">原型到带阻</h3>
+        <div class="section_content">
+            <p>和带通类似，首先我们映射一个高通滤波器</p>
+            <p>\[s\xleftarrow[]{}\frac{bw}{s}\]</p>
+            <p>然后我们可以使用带通的结论将高通滤波器映射为带阻滤波器</p>
+            <p>\[s\xleftarrow[]{}\frac{s^{2}+w_{c}^2}{s}\]</p>
+            <p class="frame"><b>注意</b> 我们还没有判断映射之后的极点位置是否在右半平面，判断方法即使看实部是否大于0，如果大于则取负即可。</p>
+            <p>因此，我们可以写出以下代码</p>
+            <pre>
+                <code>
+    std::vector&ltZPK> ProtyleToBandstop(const std::vector&ltZPK>& protyle, double fcutoff, double Q) {
+    double wo = fcutoff * 2 * pi;
+    double bw = wo / Q;
+    std::vector&ltZPK> ret{protyle.size() * 2};
+    for (size_t i = 0; i < protyle.size(); ++i) {
+        // prototype -> highpass at bw
+        ZPK s;
+        {
+            auto const& ss = protyle[i];
+            s.k = ss.k / std::norm(ss.p);
+            s.p = bw / ss.p;
+            if (ss.z) {
+                s.k *= std::norm(*ss.z);
+                s.z = bw / *ss.z;
+            }
+            else {
+                s.z = 0;
+            }
+        }
+        // highpass -> bandstop
+        auto& bp1 = ret[2 * i];
+        auto& bp2 = ret[2 * i + 1];
+        if (s.z) {
+            auto p_delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+            auto z_delta = std::sqrt(*s.z * *s.z - 4.0 * wo * wo);
+            bp1.p = ScaleComplex(s.p + p_delta, 0.5);
+            bp2.p = ScaleComplex(s.p - p_delta, 0.5);
+            bp1.z = ScaleComplex(*s.z + z_delta, 0.5);
+            bp2.z = ScaleComplex(*s.z - z_delta, 0.5);
+            bp1.k = std::sqrt(s.k);
+            bp2.k = std::sqrt(s.k);
+        }
+        else {
+            auto delta = std::sqrt(s.p * s.p - 4.0 * wo * wo);
+            bp1.p = ScaleComplex(s.p + delta, 0.5);
+            bp2.p = ScaleComplex(s.p - delta, 0.5);
+            bp1.z = 0;
+            bp1.k = std::sqrt(s.k);
+            bp2.k = std::sqrt(s.k);
+        }
+    }
+    return ret;
+    }
+                </code>
+            </pre>
+            <img src="bandstop/pzmap-butter.png" alt="pzmap-butter-bandstop">
+            <p class="centered">10hz, Q=5, 20hz FS巴特沃斯零极点</p>
+            <img src="bandstop/bode-butter.png" alt="bode-butter-bandstop">
+            <p class="centered">10hz, Q=5, 20hz FS巴特沃斯振幅响应</p>
+            <img src="bandstop/pzmap-cheb1.png" alt="pzmap-cheb1-bandstop">
+            <p class="centered">10hz, Q=5, 20hz FS切比雪夫I零极点</p>
+            <img src="bandstop/bode-cheb1.png" alt="bode-cheb1-bandstop">
+            <p class="centered">10hz, Q=5, 20hz FS切比雪夫I振幅响应</p>
+            <img src="bandstop/pzmap-cheb2.png" alt="pzmap-cheb2-bandstop">
+            <p class="centered">10hz, Q=5, 20hz FS切比雪夫II零极点</p>
+            <img src="bandstop/bode-cheb2.png" alt="bode-cheb2-bandstop">
+            <p class="centered">10hz, Q=5, 20hz FS切比雪夫II振幅响应</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">思考</h3>
+        <div class="section_content">
+            <p>这些设计方法都是先通过原型设计再连续转换再离散化的，是不是有点太复杂了呢？</p>
+            <p>有没有更简单的方法，比如直接生成w和Q，这样我可以无缝使用现有的数字滤波器代码?</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">直接生成W和Q</h3>
+        <div class="section_content">
+            <p>为啥我们要用Q表示，不直接用极点零点呢。</p>
+            <p>我发现大部分已有的滤波器设计算法都是用Q表示而不是直接用零点和极点，比如。RBJ使用的有Q和Slope，SVF因为物理电路的原因不得不使用Q或者阻尼系数来表示。</p>
+            <a href="https://dsp.stackexchange.com/questions/29589/whats-the-q-of-a-pole-at-the-origin-of-the-s-plane">Q与S域极点的关系</a>
+            <img src="Q_and_s_domain.png" alt="Q_and_s_domain">
+            <hr>
+            <p>给定极点</p>
+            <p>\[p=a+bi\]</p>
+            <p>\[\overline{p}=a-bi\]</p>
+            <p>\[(s-p)(s-\overline{p})=s^2-s(p+\overline{p})+p\overline{p}=s^2-2as+(a^2+b^2)\]</p>
+            <p>我们有</p>
+            <p>\[w=\sqrt{a^2+b^2}\]</p>
+            <p>\[Q=-\frac{w}{2a}\]</p>
+            <p>或者用另一种写法</p>
+            <p>\[p=L*e^{ix}\]</p>
+            <p>\[w=L\]</p>
+            <p>\[Q=-\frac{1}{2cos(x)}\]</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">巴特沃斯</h3>
+        <div class="section_content">
+            <p>根据先前的内容</p>
+            <img src="butter-poles.png" alt="butter-poles">
+            <p>可以看出巴特沃斯的每个滤波器的w都是1</p>
+            <p>\[Q=-\frac{w}{2a}=\frac{1}{2sin\frac{(2k-1)\pi}{2n}}\]</p>
+            <p>验证一下我们的想法</p>
+            <p>n=1,2n=2,k=1,Q=0.5. √</p>
+            <p>n=2,2n=4.k=1,Q=sqrt(2)/2;k=2,Q=sqrt(2)/2. √</p>
+            <pre>
+                <code>
+struct WQ {
+    float w;
+    float Q;
+};
+std::vector<WQ> Butterworth(int num_filter) {
+    std::vector<ZPK> ret{static_cast<size_t>(num_filter)};
+
+    int n = 2 * num_filter;
+    int i = 0;
+    for (int k = 1; k <= num_filter; ++k) {
+        double phi = (2.0 * k - 1.0) * pi / (2.0 * n);
+        ret[i].w = 1.0;
+        ret[i].Q = 1.0 / (2.0 * std::sin(phi));
+        ++i;
+    }
+
+    return ret;
+}
+                </code>
+            </pre>
+            <p>哦，天哪，我们还是在模拟域中进行计算，但是没事，我们可以保留Q不变只对w进行预翘曲</p>
+            <p>幸运的是，RBJ和SVF都已经为我们准备了预翘曲w的功能，所以只需要填写数字角频率和Q即可</p>
+            <hr>
+            <p>另外的，关于预翘曲有关的内容</p>
+            <p>假定数字滤波器频率位于0~pi之间，使用频率则是0~奈奎斯特频率</p>
+            <p>那么不做频率预翘曲使用的模拟滤波器频率wa与数字频率的wd关系</p>
+            <p>\[wa=tan(\frac{wd}{2})\]</p>
+            <p>\[wd=2atan(wa)\]</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">带通滤波器</h3>
+        <div class="section_content">
+             <p>给定一个数字截止频率wd=1的数字低通滤波器，如何将其变成位于w1~w2的带通滤波器呢？</p>
+             <a href="https://dsp.stackexchange.com/questions/71804/derivation-of-the-lowpass-to-bandpass-transformation">LP2BP</a>
+             <p>TOBE continued</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">评论</h3>
+        <div class="section_content">
+            <script src="https://utteranc.es/client.js"
+                repo="a5632645/a5632645.github.io"
+                issue-term="pathname"
+                theme="github-light"
+                crossorigin="anonymous"
+                async>
+            </script>
+        </div>
+    </section>
     <script src="../../main.js"></script>
-    <script src="../../mulu.js"></script>
 </body>
 
 </html>
