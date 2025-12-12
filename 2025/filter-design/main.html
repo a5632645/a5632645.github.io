@@ -706,8 +706,19 @@ std::vector<WQ> Butterworth(int num_filter) {
         <h3 class="section-title">带通滤波器</h3>
         <div class="section_content">
              <p>给定一个数字截止频率wd=1的数字低通滤波器，如何将其变成位于w1~w2的带通滤波器呢？</p>
+             <p>好吧，我们可能有两种方法解决这个问题。</p>
+             <p>第一是推导出模拟域中w和Q如何变化</p>
+             <p>第二是使用数字全通滤波器</p>
              <a href="https://dsp.stackexchange.com/questions/71804/derivation-of-the-lowpass-to-bandpass-transformation">LP2BP</a>
-             <p>TOBE continued</p>
+             <hr>
+             <p>单极点的低通到带通变换还是比较简单的，上面的链接中就能推导出来。</p>
+             <p>给定一个模拟低通滤波器</p>
+             <p>\[H(s)=\frac{1}{s^2+\frac{s}{Q}+1}\]</p>
+             <p>应用一个低通到带通变换</p>
+             <p>\[s=\frac{s^2+wc^2}{s*bw}\]</p>
+             <p>我猜测输出将会是两个带通滤波器的组合</p>
+             <p>模拟带通滤波器是</p>
+             <p>\[H(s)=\frac{s}{s^2+\frac{s}{Q1}+1}\]</p>
         </div>
     </section>
 

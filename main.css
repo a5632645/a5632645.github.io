@@ -1,5 +1,7 @@
 body{
     background-color: rgb(221, 221, 221);
+    margin: 4px;
+    padding: 0;
 }
 
 .no_warp{
@@ -58,19 +60,38 @@ img{
     box-sizing: border-box;
 }
 
+/* button with 3d border */
+.button_3d {
+    background-color: #c0c0c0;
+    border: 2px outset #808080;
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin: 4px 0px;
+}
+
+.button_3d:hover {
+    background-color: #d0d0d0;
+}
+
+.button_3d:active {
+    background-color: #b0b0b0;
+    border: 2px inset #808080;
+}
+
 /* 3d border like section */
 section {
     border-top: 2px solid white;
     border-left: 2px solid white;
     border-bottom: 2px solid black;
     border-right: 2px solid black;
-    margin: 16px 0px;
+    margin: 4px 2px;
 }
 
 .section-title {
     position: sticky;
     top: 0;
     
+    line-height: 0.1;
     background-color: #dddddd;
     padding: 16px 8px;
     margin: 0;
