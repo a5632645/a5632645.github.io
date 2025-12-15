@@ -28,7 +28,11 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <td nowrap>2025-12-07</td>
+                        <td>2025-12-15</td>
+                        <td>补充了LVGL相关的内容</td>
+                    </tr>
+                    <tr>
+                        <td>2025-12-07</td>
                         <td>首次创建</td>
                     </tr>
                 </tbody>
@@ -38,7 +42,7 @@
     <section>
         <h3 class="section-title">为什么要这样做</h3>
         <div class="section_content">
-            <p>GD32有一个和STM32的DMA2d相对的外设叫IPA，他有更多的功能，比如<b>缩放</b>，<b>旋转</b>，但是LVGL没有内嵌的支持。不支持能不能用STM32的HAL库直接运行。</p>
+            <p>GD32有一个和STM32的DMA2d相对的外设叫IPA，他有更多的功能，比如<b>缩放</b>，<b>旋转</b>，但是LVGL没有内嵌的支持。</p>
             <p>IPA非常难用，它的参数都很抽象，而且需要CPU来计算一些边界条件来阻止IPA访问到你不想要的内存区域。</p>
             <p><b>不是，哥们，为什么不能设计成更简单的方式啊。就像下面的那样，从某个SRC图形复制一个区域到LTDC缓冲区的某个特定位置。</b></p>
         </div>
@@ -46,6 +50,65 @@
         <h3 class="section-title">TODO</h3>
         <div class="section_content">
             <p>缩放和旋转功能</p>
+        </div>
+    </section>
+    <section>
+        <h3 class="section-title">LVGL</h3>
+        <div class="section_content">
+            <p>虽然LVGL没有直接对IPA的支持，但我们可以魔改DMA2D的代码，让它支持IPA。</p>
+            <p>IPA和DMA2D的寄存器非常相似，只不过命名不同，以及一些新增加的功能。我没有玩那些旋转缩放的功能没有写上去。</p>
+            <img src="lvgl_file.png" alt="lvgl_file">
+            <p>拷贝DMA2D的文件，我将其改了名字。我没有设计中断的支持，我听说IPA速度非常快，甚至操作系统切换线程的开销都比等待它完成还要高。</p>
+            <pre>
+                <code>
+void lv_draw_dma2d_configure_and_start_transfer(const lv_draw_dma2d_configuration_t* conf) {
+    if (conf->w == 0 || conf->h == 0) return;
+
+    while (IPA_CTL & IPA_CTL_TEN)
+        ;
+
+    /* number of lines register */
+    IPA_IMS = (conf->w << 16) | conf->h;
+
+    /* output */
+
+    /* output memory address register */
+    IPA_DMADDR = (uint32_t)(uintptr_t) conf->output_address;
+    /* output offset register */
+    IPA_DLOFF = conf->output_offset;
+    /* output pixel format converter control register */
+    IPA_DPCTL = conf->output_cf;
+
+    /* Fill color. Only for mode LV_DRAW_DMA2D_MODE_REGISTER_TO_MEMORY */
+    IPA_DPV = conf->reg_to_mem_mode_color;
+
+    /* foreground */
+
+    /* foreground memory address register */
+    IPA_FMADDR = (uint32_t)(uintptr_t) conf->fg_address;
+    /* foreground offset register */
+    IPA_FLOFF = conf->fg_offset;
+    /* foreground color. only for mem-to-mem with blending and fixed-color foreground */
+    IPA_FPV = conf->fg_color;
+    /* foreground pixel format converter control register */
+    IPA_FPCTL = ((uint32_t)conf->fg_cf) | (conf->fg_alpha << 24) | (conf->fg_alpha_mode << 16);
+
+    /* background */
+
+    IPA_BMADDR = (uint32_t)(uintptr_t) conf->bg_address;
+    IPA_BLOFF = conf->bg_offset;
+    IPA_BPV = conf->bg_color;
+    IPA_BPCTL = (((uint32_t)conf->bg_cf)) | (conf->bg_alpha << 24) | (conf->bg_alpha_mode << 16);
+
+    /* ensure the DMA2D register values are observed before the start transfer bit is set */
+    __DSB();
+
+    /* start the transfer (also set mode and enable transfer complete interrupt) */
+    IPA_CTL = IPA_CTL_TEN | (((uint32_t)conf->mode) << 16);
+}
+                </code>
+            </pre>
+            <p>主要的修改在ipa_draw.c文件中，替换dma2d的时钟启动关闭，主要就是这个绘制的操作了，对着手册上的寄存器改就行。</p>
         </div>
     </section>
     <section>

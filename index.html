@@ -27,7 +27,7 @@
             <tbody>
                 <tr>
                     <td>2025-12-07</td>
-                    <td>2025-12-07</td>
+                    <td>2025-12-15</td>
                     <td><a href="2025/gd32_ipa/index.html">gd32h757hzmt6 IPA调教</a></td>
                 </tr>
                 <tr>
@@ -108,7 +108,7 @@
                 let date = new Date(year, month - 1, day);
                 let current_date = new Date();
                 let delta_date = Math.abs(current_date.getTime() - date.getTime());
-                let delta_days = Math.ceil(delta_date / (1000 * 60 * 60 * 24));
+                let delta_days = Math.floor(delta_date / (1000 * 60 * 60 * 24));
                 
                 let delta_days_td = page_table[i].appendChild(document.createElement("td"));
                 delta_days_td.textContent = `${delta_days} days`;
