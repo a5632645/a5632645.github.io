@@ -10,13 +10,14 @@
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
     <script>hljs.highlightAll();</script>
-    <!-- math -->
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
     <style>
         code {
-            background-color: #fff;
+            background-color: #eee;
+        }
+        pre {
+            background-color: #eee;
         }
     </style>
     <div>
@@ -188,6 +189,83 @@ shall be reported zero. Only the first 13 bits behind the binary point are requi
 be optionally used to extend the precision of Ff
 , otherwise, they shall be reported as zero.
             </pre>
+            <hr>
+        </div>
+    </section>
+    <section>
+        <h3 class="section-title">CDC ACM</h3>
+        <div class="section_content">
+            <h3>CDC控制接口</h3>
+            <p>接口编号在<code>wIndex & 0xff</code></p>
+            <table border="1">
+                <thead>
+                    <th>bRequest</th>
+                    <th>wValue</th>
+                    <th>做什么</th>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>GET_LINE_CODING(0x21)</td>
+                        <td></td>
+                        <td>
+                            返回一个7字节的信息
+                            <pre>
+uint32_t baud_rate;
+uint8_t stop_bits; // 停止位
+uint8_t parity;    // 奇偶校验
+uint8_t data_bits; // 数据位
+                            </pre>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>SET_LINE_CODING(0x20)</td>
+                        <td></td>
+                        <td>
+                            设置一个7字节的信息，看上面
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>CDC_SET_LINE_CTLSTE(0x22)</td>
+                        <td>
+                            <pre>
+bit0: DTR
+bit1: RTS
+                            </pre>
+                        </td>
+                        <td>只有DTR为1时你可以发数据给上位机，否则主机会拒绝你的数据并产生Stall</td>
+                    </tr>
+                    <tr>
+                        <td>SEND_ENCAPSULATED_COMMAND(0x00)</td>
+                        <td></td>
+                        <td><a href="https://www.usbzh.com/article/detail-1503.html">不知道干嘛的，反正不stall</a></td>
+                    </tr>
+                    <tr>
+                        <td>GET_ENCAPSULATED_RESPONSE(0x01)</td>
+                        <td></td>
+                        <td><a href="https://www.usbzh.com/article/detail-1504.html">不知道干嘛的，反正不stall</a></td>
+                    </tr>
+                    <tr>
+                        <td>SET_COMM_FEATURE(0x02)</td>
+                        <td></td>
+                        <td><a href="https://www.usbzh.com/article/detail-1505.html">不知道干嘛的，反正不stall</a></td>
+                    </tr>
+                    <tr>
+                        <td>GET_COMM_FEATURE(0x03)</td>
+                        <td></td>
+                        <td><a href="https://www.usbzh.com/article/detail-1506.html">不知道干嘛的，反正不stall</a></td>
+                    </tr>
+                    <tr>
+                        <td>CLEAR_COMM_FEATURE(0x04)</td>
+                        <td></td>
+                        <td><a href="https://www.usbzh.com/article/detail-1507.html">不知道干嘛的，反正不stall</a></td>
+                    </tr>
+                    <tr>
+                        <td>SEND_BREAK(0x23)</td>
+                        <td></td>
+                        <td><a href="https://www.usbzh.com/article/detail-1517.html">不知道干嘛的，反正不stall</a></td>
+                    </tr>
+                </tbody>
+            </table>
             <hr>
         </div>
     </section>
