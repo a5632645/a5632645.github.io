@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>fix me</title>
+
+    <link rel="stylesheet" href="../../main.css">
+    <!-- code -->
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <!-- math -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <style>
+        code {
+            background-color: #fff;
+        }
+    </style>
+    <div>
+        <a href="../../index.html">back</a>
+        <b>usb快速参考</b>
+        <hr>
+    </div>
+    <section>
+        <h3 class="section-title">修改历史</h3>
+        <div class="section_content">
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>2025-12-17</td>
+                        <td>首次创建</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+    <section>
+        <h3 class="section-title">UAC2</h3>
+        <div class="section_content">
+            <p>强烈推荐对着<a href="https://www.usb.org/sites/default/files/Audio2_with_Errata_and_ECN_through_Apr_2_2025.pdf">官方手册</a>食用</p>
+            <hr>
+        </div>
+        <div class="section_content">
+            <h3>AudioControl接口请求</h3>
+            <p>接口编号在<code>wIndex & 0xff</code>，实体编号在<code>wIndex >> 8</code>，请求操作在<code>bRequest</code></p>
+            <table border="1" style="width:100%;">
+                <thead>
+                    <tr>
+                        <!-- <th>GET/SET(bmRequestType & 0x80)</th> -->
+                        <th>GET/SET</th>
+                        <th>bRequest</th>
+                        <th>实体类型</th>
+                        <th>wValue高字节</th>
+                        <th>wValue低字节</th>
+                        <th>做什么</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- clock page 97 -->
+                    <tr>
+                        <td>GET</td>
+                        <td rowspan="2">CUR(1)</td>
+                        <td rowspan="4">Clock(97页)</td>
+                        <td rowspan="2">CS_SAM_FREQ_CONTROL(0x01)</td>
+                        <td rowspan="4"></td>
+                        <td>传uint32的采样率</td>
+                    </tr>
+                    <tr>
+                        <td>SET</td>
+                        <td>设置uint32的采样率</td>
+                    </tr>
+                    <tr>
+                        <td>GET</td>
+                        <td>RANGE(2)</td>
+                        <td>CS_SAM_FREQ_CONTROL(0x01)</td>
+                        <td>传采样率表，格式
+                            <code>
+                                uint16 count,
+                                [{uint32 min=fs, uint32 max=fs, uint32 res=0}
+                                ...]
+                            </code>
+                            min max一样，step必须是0
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>GET</td>
+                        <td>CUR(1)</td>
+                        <td>CS_CLOCK_VALID_CONTROL(0x02)</td>
+                        <td>传uint8，时钟有没有稳定</td>
+                    </tr>
+                    <!-- FeatureUnit page 102 -->
+                    <tr>
+                        <td>GET</td>
+                        <td rowspan="2">CUR(1)</td>
+                        <td rowspan="5">FeatureUnit(102页)</td>
+                        <td rowspan="2">FU_MUTE_CONTROL(0x01)</td>
+                        <td rowspan="5">通道编号</td>
+                        <td>传uint8，是否静音</td>
+                    </tr>
+                    <tr>
+                        <td>SET</td>
+                        <td>设置uint8，是否静音，1是静音</td>
+                    </tr>
+                    <tr>
+                        <td>GET</td>
+                        <td rowspan="2">CUR(1)</td>
+                        <td rowspan="3">FU_VOLUME_CONTROL(0x02)</td>
+                        <td>传uint16，音量</td>
+                    </tr>
+                    <tr>
+                        <td>SET</td>
+                        <td>设置uint16,音量，0x8000是静音</td>
+                    </tr>
+                    <tr>
+                        <td>GET</td>
+                        <td rowspan="2">RANGE(2)</td>
+                        <td>传<code>uint16 count [uint16 min, uint16 max, uint16 step]</code>。0x8001(-127.9961dB)~0x7fff(127.9961dB),step从0x00001(1/256dB)~0x7fff(127.9961dB)</td>
+                    </tr>
+                </tbody>
+            </table>
+            <hr>
+        </div>
+        <div class="section_content">
+            <h3>AudioStream接口请求</h3>
+            <hr>
+        </div>
+        <div class="section_content">
+            <h3>反馈速率转换</h3>
+            <p>省流：把你的采样率（每秒多少个样本）转换为（每帧/微帧）多少个样本。</p>
+            <p>高速：4(unused) 12(整数部分).13(小数部分) 3(optional)</p>
+            <pre>
+                <code>
+void Hs(uint32_t sample_rate, uint8_t buffer[4]) {
+    // oh, so easy with FPU
+    // float a = sample_rate / 8000;
+    // uint16_t intergal = a;
+    // uint16_t frac = (a - intergal) * 65536;
+    // buffer[0] = frac & 0xff;
+    // buffer[1] = frac >> 8;
+    // buffer[2] = intergal & 0xff;
+    // buffer[3] = intergal >> 8;
+
+    uint32_t intergal = sample_rate / 8000;
+    uint32_t frac = (sample_rate % 8000) * 65536 / 8000;
+    uint32_t rate = (intergal &lt;&lt; 16) | (frac & 0xffff);
+    buffer[0] = rate & 0xff;
+    buffer[1] = rate >> 8;
+    buffer[2] = rate >> 16;
+    buffer[3] = rate >> 24;
+}
+                </code>
+            </pre>
+            <p>全速：10(整数部分).10(小数部分) 4(optional)</p>
+            <pre>
+                <code>
+void Fs(uint32_t sample_rate, uint8_t buffer[3]) {
+    uint32_t intergal = sample_rate / 1000;
+    uint32_t frac = (sample_rate % 1000) * (1 &lt;&lt 14) / 1000;
+    uint32_t rate = (intergal &lt;&lt; 10) | (frac & 0x3fff);
+    buffer[0] = rate & 0xff;
+    buffer[1] = rate >> 8;
+    buffer[2] = rate >> 16;
+}
+                </code>
+            </pre>
+            <p>或许你想要<a href="https://www.usb.org/document-library/usb-20-specification">原文</a>，usb2.0规范102页</p>
+            <pre>
+    In summary, for full-speed endpoints, the Ff
+ value shall be encoded in an unsigned 10.10 (K=10) format
+which fits into three bytes. Because the maximum integer value is fixed to 1,023, the 10.10 number will be
+left-justified in the 24 bits, so that it has a 10.14 format. Only the first ten bits behind the binary point are
+required. The lower four bits may be optionally used to extend the precision of Ff
+, otherwise, they shall be
+reported as zero. For high-speed endpoints, the Ff
+ value shall be encoded in an unsigned 12.13 (K=13)
+format which fits into four bytes. The value shall be aligned into these four bytes so that the binary point is
+located between the second and the third byte so that it has a 16.16 format. The most significant four bits
+shall be reported zero. Only the first 13 bits behind the binary point are required. The lower three bits may
+be optionally used to extend the precision of Ff
+, otherwise, they shall be reported as zero.
+            </pre>
+            <hr>
+        </div>
+    </section>
+    <!-- <section>
+        <h3 class="section-title">评论</h3>
+        <div class="section_content">
+            <script src="https://utteranc.es/client.js"
+                repo="a5632645/a5632645.github.io"
+                issue-term="pathname"
+                theme="github-light"
+                crossorigin="anonymous"
+                async>
+            </script>
+        </div>
+    </section> -->
+    <script src="../../main.js"></script>
+</body>
+</html>
