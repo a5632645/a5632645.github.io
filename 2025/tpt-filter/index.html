@@ -135,7 +135,74 @@
             <p>因此，我们只需要将bp和lp的系数分别除以g和g^2即可（注：g是SVF的模拟角频率）</p>
             <img src="svf_biquad_zero_compare2.png" alt="svf_biquad_zero_compare2">
             <p class="img_desc">TDF2 vs TPT-SVF，绿色是svf，红色是tdf</p>
-            <p>你说增益？好吧，你直接使用模拟域设计里那个滤波器增益k给svf乘上就行了。</p>
+            <p>你说增益？好吧，我并不明白为什么会这样，但解决方案就是有共轭零点时SVF的增益和zpk的k是一样的，没有共轭零点时增益=zpk.k / (g * g)</p>
+            <pre>
+                <code>
+class SvfTPT {
+public:
+    void Reset() noexcept {
+        s1_ = 0;
+        s2_ = 0;
+    }
+
+    void SetAnalogPoleZero(
+        qwqdsp_filter::IIRDesign::ZPK zpk, float k
+    ) noexcept {
+        float p_re = static_cast<float>(zpk.p.real());
+        float p_im = static_cast<float>(zpk.p.imag());
+        auto analog_w = std::sqrt(p_re * p_re + p_im * p_im);
+        auto Q = analog_w / (-2.0f * p_re);
+        Q = std::abs(Q);
+        g_ = analog_w;
+        R2_ = 1.0f / Q;
+        d_ = 1.0f / (1.0f + R2_ * g_ + g_ * g_);
+
+        if (zpk.z) {
+            float z_re = static_cast<float>((*zpk.z).real());
+            float z_im = static_cast<float>((*zpk.z).imag());
+            lp_mix_ = (z_re * z_re + z_im * z_im) / (g_ * g_);
+            hp_mix_ = 1;
+            lp_mix_ *= (zpk.k);
+            hp_mix_ *= (zpk.k);
+        }
+        else {
+            lp_mix_ = 1;
+            hp_mix_ = 0;
+            lp_mix_ *= (zpk.k / (g_ * g_));
+            hp_mix_ *= (zpk.k / (g_ * g_));
+        }
+    }
+
+    float Tick(float x) noexcept {
+        auto[hp, bp, lp] = TickMultiMode(x);
+        return lp_mix_ * lp + hp_mix_ * hp;
+    }
+
+    /**
+     * @return [hp, bp, lp]
+     */
+    std::array<float, 3> TickMultiMode(float x) noexcept {
+        float hp = (x - (g_ + R2_) * s1_ - s2_) * d_;
+        float v1 = g_ * hp;
+        float bp = v1 + s1_;
+        float v2 = g_ * bp;
+        float lp = v2 + s2_;
+        s1_ = bp + v1;
+        s2_ = lp + v2;
+        return {hp, bp, lp};
+    }
+private:
+    float R2_{};
+    float g_{};
+    float d_{};
+    float s1_{};
+    float s2_{};
+
+    float lp_mix_{};
+    float hp_mix_{};
+};
+                </code>
+            </pre>
         </div>
     </section>
     <section>
