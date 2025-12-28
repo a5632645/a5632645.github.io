@@ -126,3 +126,9 @@ section {
 .catalog-button:hover .catalog-list {
     display: flex;
 }
+
+.img_desc {
+    color: steelblue;
+    text-align: center;
+    margin: 0;
+}

@@ -16,7 +16,29 @@
 <body>
     <a href="../../index.html">back</a>
     <hr>
-
+    <section>
+        <h3 class="section-title">修改历史</h3>
+        <div class="section_content">
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>2025-12-28</td>
+                        <td>增加了为TPT SVF添加零点的内容</td>
+                    </tr>
+                    <tr>
+                        <td>2025-11-1</td>
+                        <td>首次创建</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
     <section>
         <h2 class="section-title">TPT 积分器</h2>
         <div class="section_content">
@@ -93,6 +115,27 @@
                     }
                 </code>
             </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">为TPT SVF添加零点</h2>
+        <div class="section_content">
+            <img src="	https://www.dataforth.com/media/g/active-analog-elliptic-filter/figure-1-state-variable-filters.png" alt="active-analog-elliptic-filter">
+            <p>为了像上面的图片那样使用SVF来制作椭圆滤波器，需要添加在虚轴上的零点，零点会变成什么样子呢？</p>
+            <p>\[(s-p)(s-\bar{p})=s^2-2Re\{p\}+p\bar{p}\]</p>
+            <p>我们知道SVF的LP是1/xxx，BP是s/xxx，HP是s^2/xxx</p>
+            <p>虚轴上的零点拼接的多项式只留下了s^2和1两个项，所以我们才会在上面的图中看到将HP和LP通过一个增加加法器作为输出。</p>
+            <p>理论存在，实践开始。我们直接在数字SVF上也这样混合，使用模拟域的零点，结果怎么样呢？</p>
+            <p><b>完全不行</b>，零点产生了很严重的偏差。</p>
+            <img src="svf_biquad_zero_compare.png" alt="svf_biquad_zero_compare">
+            <p class="img_desc">TDF2 vs TPT-SVF，绿色是svf，红色是tdf</p>
+        </div>
+        <div class="section_content">
+            <p>AI给出了详细的问题所在，双线性变换会导致数字SVF的BP和LP输出有一个增益g和g^2，或者用带有预翘曲双线性变换z替换s时会有一个1/g的增益</p>
+            <p>因此，我们只需要将bp和lp的系数分别除以g和g^2即可（注：g是SVF的模拟角频率）</p>
+            <img src="svf_biquad_zero_compare2.png" alt="svf_biquad_zero_compare2">
+            <p class="img_desc">TDF2 vs TPT-SVF，绿色是svf，红色是tdf</p>
+            <p>你说增益？好吧，你直接使用模拟域设计里那个滤波器增益k给svf乘上就行了。</p>
         </div>
     </section>
     <section>
