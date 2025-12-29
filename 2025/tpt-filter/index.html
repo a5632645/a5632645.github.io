@@ -118,94 +118,6 @@
         </div>
     </section>
     <section>
-        <h2 class="section-title">为TPT SVF添加零点</h2>
-        <div class="section_content">
-            <img src="	https://www.dataforth.com/media/g/active-analog-elliptic-filter/figure-1-state-variable-filters.png" alt="active-analog-elliptic-filter">
-            <p>为了像上面的图片那样使用SVF来制作椭圆滤波器，需要添加在虚轴上的零点，零点会变成什么样子呢？</p>
-            <p>\[(s-p)(s-\bar{p})=s^2-2Re\{p\}+p\bar{p}\]</p>
-            <p>我们知道SVF的LP是1/xxx，BP是s/xxx，HP是s^2/xxx</p>
-            <p>虚轴上的零点拼接的多项式只留下了s^2和1两个项，所以我们才会在上面的图中看到将HP和LP通过一个增加加法器作为输出。</p>
-            <p>理论存在，实践开始。我们直接在数字SVF上也这样混合，使用模拟域的零点，结果怎么样呢？</p>
-            <p><b>完全不行</b>，零点产生了很严重的偏差。</p>
-            <img src="svf_biquad_zero_compare.png" alt="svf_biquad_zero_compare">
-            <p class="img_desc">TDF2 vs TPT-SVF，绿色是svf，红色是tdf</p>
-        </div>
-        <div class="section_content">
-            <p>AI给出了详细的问题所在，双线性变换会导致数字SVF的BP和LP输出有一个增益g和g^2，或者用带有预翘曲双线性变换z替换s时会有一个1/g的增益</p>
-            <p>因此，我们只需要将bp和lp的系数分别除以g和g^2即可（注：g是SVF的模拟角频率）</p>
-            <img src="svf_biquad_zero_compare2.png" alt="svf_biquad_zero_compare2">
-            <p class="img_desc">TDF2 vs TPT-SVF，绿色是svf，红色是tdf</p>
-            <p>你说增益？好吧，我并不明白为什么会这样，但解决方案就是有共轭零点时SVF的增益和zpk的k是一样的，没有共轭零点时增益=zpk.k / (g * g)</p>
-            <pre>
-                <code>
-class SvfTPT {
-public:
-    void Reset() noexcept {
-        s1_ = 0;
-        s2_ = 0;
-    }
-
-    void SetAnalogPoleZero(
-        qwqdsp_filter::IIRDesign::ZPK zpk, float k
-    ) noexcept {
-        float p_re = static_cast<float>(zpk.p.real());
-        float p_im = static_cast<float>(zpk.p.imag());
-        auto analog_w = std::sqrt(p_re * p_re + p_im * p_im);
-        auto Q = analog_w / (-2.0f * p_re);
-        Q = std::abs(Q);
-        g_ = analog_w;
-        R2_ = 1.0f / Q;
-        d_ = 1.0f / (1.0f + R2_ * g_ + g_ * g_);
-
-        if (zpk.z) {
-            float z_re = static_cast<float>((*zpk.z).real());
-            float z_im = static_cast<float>((*zpk.z).imag());
-            lp_mix_ = (z_re * z_re + z_im * z_im) / (g_ * g_);
-            hp_mix_ = 1;
-            lp_mix_ *= (zpk.k);
-            hp_mix_ *= (zpk.k);
-        }
-        else {
-            lp_mix_ = 1;
-            hp_mix_ = 0;
-            lp_mix_ *= (zpk.k / (g_ * g_));
-            hp_mix_ *= (zpk.k / (g_ * g_));
-        }
-    }
-
-    float Tick(float x) noexcept {
-        auto[hp, bp, lp] = TickMultiMode(x);
-        return lp_mix_ * lp + hp_mix_ * hp;
-    }
-
-    /**
-     * @return [hp, bp, lp]
-     */
-    std::array<float, 3> TickMultiMode(float x) noexcept {
-        float hp = (x - (g_ + R2_) * s1_ - s2_) * d_;
-        float v1 = g_ * hp;
-        float bp = v1 + s1_;
-        float v2 = g_ * bp;
-        float lp = v2 + s2_;
-        s1_ = bp + v1;
-        s2_ = lp + v2;
-        return {hp, bp, lp};
-    }
-private:
-    float R2_{};
-    float g_{};
-    float d_{};
-    float s1_{};
-    float s2_{};
-
-    float lp_mix_{};
-    float hp_mix_{};
-};
-                </code>
-            </pre>
-        </div>
-    </section>
-    <section>
         <h2 class="section-title">Ladder 4 pole lowpass</h2>
         <div class="section_content">
             <img src="ladder-4pole.png" alt="ladder-4pole">
@@ -481,6 +393,142 @@ private:
         </div>
     </section>
     <section>
+        <h2 class="section-title">为TPT SVF添加零点</h2>
+        <div class="section_content">
+            <img src="	https://www.dataforth.com/media/g/active-analog-elliptic-filter/figure-1-state-variable-filters.png" alt="active-analog-elliptic-filter">
+            <p>为了像上面的图片那样使用SVF来制作椭圆滤波器，需要添加在虚轴上的零点，零点会变成什么样子呢？</p>
+            <p>\[(s-p)(s-\bar{p})=s^2-2Re\{p\}+p\bar{p}\]</p>
+            <p>我们知道SVF的LP是1/xxx，BP是s/xxx，HP是s^2/xxx</p>
+            <p>虚轴上的零点拼接的多项式只留下了s^2和1两个项，所以我们才会在上面的图中看到将HP和LP通过一个增加加法器作为输出。</p>
+            <p>理论存在，实践开始。我们直接在数字SVF上也这样混合，使用模拟域的零点，结果怎么样呢？</p>
+            <p><b>完全不行</b>，零点产生了很严重的偏差。</p>
+            <img src="svf_biquad_zero_compare.png" alt="svf_biquad_zero_compare">
+            <p class="img_desc">TDF2 vs TPT-SVF，绿色是svf，红色是tdf</p>
+        </div>
+        <div class="section_content">
+            <p>AI给出了详细的问题所在，双线性变换会导致数字SVF的BP和LP输出有一个增益g和g^2，或者用带有预翘曲双线性变换z替换s时会有一个1/g的增益</p>
+            <p>因此，我们只需要将bp和lp的系数分别除以g和g^2即可（注：g是SVF的模拟角频率）</p>
+            <img src="svf_biquad_zero_compare2.png" alt="svf_biquad_zero_compare2">
+            <p class="img_desc">TDF2 vs TPT-SVF，绿色是svf，红色是tdf</p>
+            <p>你说增益？好吧，我并不明白为什么会这样，但解决方案就是有共轭零点时SVF的增益和zpk的k是一样的，没有共轭零点时增益=zpk.k / (g * g)</p>
+            <pre>
+                <code>
+class SvfTPT {
+public:
+    void Reset() noexcept {
+        s1_ = 0;
+        s2_ = 0;
+    }
+
+    void SetAnalogPoleZero(
+        qwqdsp_filter::IIRDesign::ZPK zpk, float k
+    ) noexcept {
+        float p_re = static_cast<float>(zpk.p.real());
+        float p_im = static_cast<float>(zpk.p.imag());
+        auto analog_w = std::sqrt(p_re * p_re + p_im * p_im);
+        auto Q = analog_w / (-2.0f * p_re);
+        Q = std::abs(Q);
+        g_ = analog_w;
+        R2_ = 1.0f / Q;
+        d_ = 1.0f / (1.0f + R2_ * g_ + g_ * g_);
+
+        if (zpk.z) {
+            float z_re = static_cast<float>((*zpk.z).real());
+            float z_im = static_cast<float>((*zpk.z).imag());
+            lp_mix_ = (z_re * z_re + z_im * z_im) / (g_ * g_);
+            hp_mix_ = 1;
+            lp_mix_ *= (zpk.k);
+            hp_mix_ *= (zpk.k);
+        }
+        else {
+            lp_mix_ = 1;
+            hp_mix_ = 0;
+            lp_mix_ *= (zpk.k / (g_ * g_));
+            hp_mix_ *= (zpk.k / (g_ * g_));
+        }
+    }
+
+    float Tick(float x) noexcept {
+        auto[hp, bp, lp] = TickMultiMode(x);
+        return lp_mix_ * lp + hp_mix_ * hp;
+    }
+
+    /**
+     * @return [hp, bp, lp]
+     */
+    std::array<float, 3> TickMultiMode(float x) noexcept {
+        float hp = (x - (g_ + R2_) * s1_ - s2_) * d_;
+        float v1 = g_ * hp;
+        float bp = v1 + s1_;
+        float v2 = g_ * bp;
+        float lp = v2 + s2_;
+        s1_ = bp + v1;
+        s2_ = lp + v2;
+        return {hp, bp, lp};
+    }
+private:
+    float R2_{};
+    float g_{};
+    float d_{};
+    float s1_{};
+    float s2_{};
+
+    float lp_mix_{};
+    float hp_mix_{};
+};
+                </code>
+            </pre>
+        </div>
+    </section>
+    <section>
+        <h2 class="section-title">转置TPT SVF</h2>
+        <div class="section_content">
+            <p>all right.上面的零点SVF面对低通高通还是简单的，但是碰到带通带阻马上就会爆炸。</p>
+            <p>在我的椭圆带通滤波器中，系数出现了极大极小的问题，带来了极大的量化噪声和调节时的click.</p>
+            <pre style="background-color: #eee;">
+                f1.lpmix: 21690.9 f1.hpmix: 0.0275746
+                f2.lpmix: 3.50542e-08 f2.hpmix: 0.0275746
+                f1.lpmix: 258.854 f1.hpmix: 0.109969
+                f2.lpmix: 4.67184e-05 f2.hpmix: 0.109969
+                f1.lpmix: 122.465 f1.hpmix: 0.0275746
+                f2.lpmix: 6.20879e-06 f2.hpmix: 0.0275746
+                f1.lpmix: 78195 f1.hpmix: 0.109969
+                f2.lpmix: 1.54655e-07 f2.hpmix: 0.109969
+                f1.lpmix: 21690.9 f1.hpmix: 0.0275746
+                f2.lpmix: 3.50542e-08 f2.hpmix: 0.0275746
+                f1.lpmix: 78195 f1.hpmix: 0.109969
+                f2.lpmix: 1.54655e-07 f2.hpmix: 0.109969
+                f1.lpmix: 21690.9 f1.hpmix: 0.0275746
+                f2.lpmix: 3.50542e-08 f2.hpmix: 0.0275746
+            </pre>
+            <p>总之，如果我们能够转置TPT SVF，那么我们就可以将极大极小增益合并在一起从而变成更小的系数。</p>
+            <img src="svf_transpose.png" alt="svf_transpose">
+            <p>记2R处的输出为w2,LP处的输出为w1,we have</p>
+            <p>\[w1 = xLP - y\]</p>
+            <p>\[w2 = xBP - 2R*y + g*w1 + s1\]</p>
+            <p>\[y = xHP + g*w2 + s2\]</p>
+            <pre>
+                <code>
+# 定义符号变量
+w1,w2,y,lp,bp,hp,s1,s2,r2,g = symbols('w1 w2 y LP BP HP s1 s2 r2 g')
+
+# 定义方程
+eq1 = w1 - (lp - y)
+eq2 = w2 - (bp - r2*y + g*w1 + s1)
+eq3 = y - (hp + g*w2 + s2)
+
+# 求解方程组，得到 u 关于 x, s1, s2, s3, s4, k, g 的表达式
+solutions = solve((eq1, eq2, eq3), (w1, w2, y))
+
+# 将 s1, s2, s3, s4, x 的因子结合在 u 的解上
+collect(solutions[y], [lp, hp, s1, s2, bp])
+                </code>
+            </pre>
+            <p>so</p>
+            <p>\[y = \frac{xHP + g*xBP + g^2*xLP + g*s1 + s2}{1 + g*2R + g^2}\]</p>
+        </div>
+    </section>
+    <!-- <section>
         <h3 class="section-title">评论</h3>
         <div class="section_content">
             <script src="https://utteranc.es/client.js"
@@ -491,7 +539,7 @@ private:
                 async>
             </script>
         </div>
-    </section>
+    </section> -->
     <script>
         document.onload = setInterval(() => {
             // window.scrollTo(0, document.body.scrollHeight);
