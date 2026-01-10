@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>fix me</title>
+    <title>usb快速参考</title>
 
     <link rel="stylesheet" href="../../main.css">
     <!-- code -->
@@ -37,6 +37,10 @@
                 </thead>
                 <tbody>
                     <tr>
+                        <td>2026-1-10</td>
+                        <td>添加了HID的内容</td>
+                    </tr>
+                    <tr>
                         <td>2025-12-17</td>
                         <td>首次创建</td>
                     </tr>
@@ -53,7 +57,7 @@
         <div class="section_content">
             <h3>AudioControl接口请求</h3>
             <p>接口编号在<code>wIndex & 0xff</code>，实体编号在<code>wIndex >> 8</code>，请求操作在<code>bRequest</code></p>
-            <table border="1" style="width:100%;">
+            <table border="1">
                 <thead>
                     <tr>
                         <!-- <th>GET/SET(bmRequestType & 0x80)</th> -->
@@ -269,7 +273,64 @@ bit1: RTS
             <hr>
         </div>
     </section>
-    <!-- <section>
+    <section>
+        <h3 class="section-title">HID</h3>
+        <div class="section_content">
+            <p>接口编号在<code>wIndex & 0xff</code></p>
+            <table border="1">
+                <thead>
+                    <th>bRequest</th>
+                    <th>wValue</th>
+                    <th>做什么</th>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>SET_REPORT(0x09)</td>
+                        <td rowspan="2">高8位：报告类型<br>低8位：报告id</td>
+                        <td>当hid接口没有中断接收端点时，主机会从这里发送hid报告内容给你</td>
+                    </tr>
+                    <tr>
+                        <td>GET_REPORT(0x01)</td>
+                        <td>
+                            当hid接口没有中断端点时，可能会从这里接受hid报告内容
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>GET_IDLE(0x02)</td>
+                        <td>低8位：报告id</td>
+                        <td>读取某个报告的idle速率</td>
+                    </tr>
+                    <tr>
+                        <td>SET_IDLE(0x0a)</td>
+                        <td></td>
+                        <td>53页，有点复杂</td>
+                    </tr>
+                    <tr>
+                        <td>SET_PROTOCOL(0x0b)</td>
+                        <td></td>
+                        <td rowspan="2">和boot模式有关</td>
+                    </tr>
+                    <tr>
+                        <td>GET_PROTOCOL(0x03)</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>GET_DESCRIPTOR(0x06)</td>
+                        <td rowspan="2">
+                            高8位：类型(0x21,0x22,0x23)<br>
+                            低8位：非物理描述符为0，是的话0是发物理描述符的数量，物理描述符索引从1开始
+                        </td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>SET_DESCRIPTOR(0x07)</td>
+                        <td>可选</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+    <section>
         <h3 class="section-title">评论</h3>
         <div class="section_content">
             <script src="https://utteranc.es/client.js"
@@ -280,7 +341,12 @@ bit1: RTS
                 async>
             </script>
         </div>
-    </section> -->
+    </section>
     <script src="../../main.js"></script>
+    <script>
+        let timer = setInterval(function() {
+            // window.scrollTo(0, document.body.scrollHeight);
+        }, 100);
+    </script>
 </body>
 </html>
