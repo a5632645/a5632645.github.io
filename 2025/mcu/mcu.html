@@ -14,8 +14,11 @@
     <script type="text/javascript" src="../../latex.js"></script>
 </head>
 <body>
-    <a href="../../index.html">back</a>
-    <hr>
+    <div>
+        <a href="../../index.html">back</a>
+        <b>单片机</b>
+        <hr>
+    </div>
 
     <h3>RISC-V bootloader不能跳转app</h3>
     <div class="frame">
@@ -27,7 +30,7 @@ csrw mstatus, t0
         </pre>
         <p>机器模式</p>
         <pre>
-li t0, 0x7888           
+li t0, 0x7888
 csrw mstatus, t0
         </pre>
     </div>
@@ -64,8 +67,6 @@ else {
         <p>一般是TX寄存器的长度比描述符里的端点maxpacket大导致的</p>
     </div>
 
-    <hr>
-    write in 2025-7-16, update in 2025-7-17
     <section>
         <h3 class="section-title">评论</h3>
         <div class="section_content">

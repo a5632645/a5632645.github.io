@@ -19,29 +19,7 @@
         <b>gd32h757zmt6 IPA调教</b>
         <hr>
     </div>
-    <section>
-        <h3 class="section-title">修改历史</h3>
-        <div class="section_content">
-            <table border="1">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>2025-12-15</td>
-                        <td>补充了LVGL相关的内容</td>
-                    </tr>
-                    <tr>
-                        <td>2025-12-07</td>
-                        <td>首次创建</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </section>
+
     <section>
         <h3 class="section-title">为什么要这样做</h3>
         <div class="section_content">
@@ -146,7 +124,7 @@ void lv_draw_dma2d_configure_and_start_transfer(const lv_draw_dma2d_configuratio
                 let y_bias = 100;
                 ctx.fillStyle = "rgba(255, 255, 255, 1.0)";
                 ctx.fillRect(x_bias + 0, y_bias + 0, b_ltdc_w, b_ltdc_h);
-                
+
                 ctx.font = "14px Arial";
                 ctx.fillStyle = "black";
                 ctx.fillText("LTDC", x_bias + 10, y_bias + 30);
@@ -192,7 +170,7 @@ void lv_draw_dma2d_configure_and_start_transfer(const lv_draw_dma2d_configuratio
                 ctx.fillText("image", x_bias + b_dest_x - b_src_x, y_bias + b_dest_y - b_src_y);
 
                 if (src_copy_w == 0 || src_copy_h == 0) {
-                    
+
                 }
                 else {
                     let old_b_dest_x = b_dest_x;
@@ -230,7 +208,7 @@ void lv_draw_dma2d_configure_and_start_transfer(const lv_draw_dma2d_configuratio
                         ctx.strokeRect(x_bias + ltdc_x_offset, y_bias + ltdc_y_offset, clamp_w, clamp_h);
                         ctx.strokeRect(x_bias, y_bias + ltdc_y_offset + clamp_h / 2, first_part, 1);
                         ctx.strokeRect(x_bias + ltdc_x_offset + clamp_w, y_bias + ltdc_y_offset + clamp_h / 2, ltdc_line_offset - first_part, 1);
-                
+
                         // output ipa src bound
                         let src_x_offset = x - old_b_dest_x + b_src_x;
                         let src_y_offset = y - old_b_dest_y + b_src_y;
@@ -366,7 +344,7 @@ static void IPA_FillRectange(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uin
       .in_ltdc_w = kLcdWidth,
       .in_w = w,
       .in_x = x,
-      .in_y = y  
+      .in_y = y
     };
     if (!IpaFillBound_Eval(&b)) return;
 

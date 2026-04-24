@@ -16,29 +16,7 @@
 <body>
     <a href="../../index.html">back</a>
     <hr>
-    <section>
-        <h3 class="section-title">修改历史</h3>
-        <div class="section_content">
-            <table border="1">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>2025-12-28</td>
-                        <td>增加了为TPT SVF添加零点的内容</td>
-                    </tr>
-                    <tr>
-                        <td>2025-11-1</td>
-                        <td>首次创建</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </section>
+
     <section>
         <h2 class="section-title">TPT 积分器</h2>
         <div class="section_content">
@@ -103,14 +81,14 @@
                     float TickSVF(float x, float w, float Q) {
                         float g = tan(w / 2);
                         float R2 = 1 / Q;
-        
+
                         float yHP = (x - (R2 + g) * s1_ - s2_) / (1 + R2 * g + g * g);
                         float yBP = yHP * g + s1_;
                         s1_ = g * yHP + yBP;
                         float yLP = yBP * g + s2_;
                         s2_ = g * yBP + yLP;
                         float yBPn = yBP * R2;
-        
+
                         return yLP;
                     }
                 </code>
@@ -139,7 +117,7 @@
                         s += u;
                         return y;
                     }
-        
+
                     float TickLadderLP(float x, float w, float k) {
                         float g = tan(w / 2);
                         // float k = 3.99; // [0,4] => [stable, self-oscillation]
@@ -147,12 +125,12 @@
                         float B = 1 / (1 + g);
                         float S = s4_ + s3_ * A + s2_ * A * A + s1_ * A * A * A;
                         float u = (x - B * k * S) / (1 + k * A * A * A * A);
-        
+
                         float lp1 = TickLadderLP(u, s1_, A);
                         float lp2 = TickLadderLP(lp1, s2_, A);
                         float lp3 = TickLadderLP(lp2, s3_, A);
                         float lp4 = TickLadderLP(lp3, s4_, A);
-        
+
                         return lp4;
                     }
                 </code>
@@ -181,7 +159,7 @@
                         s += u;
                         return x - y;
                     }
-        
+
                     float TickLadderHP(float x, float w, float k) {
                         float g = tan(w / 2);
                         // float k = 3.99; // [0,4] => [stable, self-oscillation]
@@ -189,12 +167,12 @@
                         float A = 1 / (1 + g);
                         float S = s4_ * A + s3_ * A * A + s2_ * A * A * A + s1_ * A * A * A * A;
                         float u = (x + k * S) / (1 + k * A * A * A * A);
-        
+
                         float hp1 = TickLadderHP(u, s1_, gHP);
                         float hp2 = TickLadderHP(hp1, s2_, gHP);
                         float hp3 = TickLadderHP(hp2, s3_, gHP);
                         float hp4 = TickLadderHP(hp3, s4_, gHP);
-        
+
                         return hp4;
                     }
                 </code>
@@ -220,10 +198,10 @@
                             float bp2;
                             float hp2;
                         } output;
-        
+
                         float g = tan(w / 2);
                         float G = (1 + g);
-        
+
                         float u = x * G * G - G * k * s2_ + k * s1_;
                         u /= (G * G - g * k);
                         float lp1 = TickTptLP(u, s1_, glp_);
@@ -231,7 +209,7 @@
                         output.lp2 = TickTptLP(lp1, s2_, glp_);
                         output.bp2 = lp1 - output.lp2;
                         output.hp2 = hp1 - output.bp2;
-        
+
                         return output;
                     }
                 </code>
@@ -262,7 +240,7 @@
                         s2 += v22;
                         return bp;
                     }
-        
+
                     // k [0,16(may be 4)]
                     // R > 0
                     auto TickTrueBandpass(float x, float w, float R, float k) noexcept {
@@ -270,15 +248,15 @@
                             float BPn1;
                             float BPn2;
                         } output;
-        
+
                         float g = tan(w / 2);
                         float B = 1 / (1 + 2 * R * g + g * g);
                         float u = B * B * R * g * k * (g * s2_ - s1_) + B * k * (g * s4_ - s3_) - x;
                         u /= (B * B * R * R * g * g * k - 1);
-        
+
                         output.BPn1 = TickHalfNormBandpass(u * R, g, s1_, s2_, B);
                         output.BPn2 = TickHalfNormBandpass(output.BPn1 * R, g, s3_, s4_, B);
-        
+
                         return output;
                     }
                 </code>
@@ -311,7 +289,7 @@
                         g_ = std::tan(w / 2) * (1 + std::numbers::sqrt2_v<float>);
                         k_ = k;
                     }
-                    
+
                     auto Tick(float x) noexcept {
                         struct Output {
                             float lp1;
@@ -323,13 +301,13 @@
                             float lp7;
                             float lp8;
                         } output;
-        
+
                         float B = 1 / (1 + g_);
                         float A = g_ * B;
                         float S = s_[7] + A * (s_[6] + A * (s_[5] + A * (s_[4] + A * (s_[3] + A * (s_[2] + A * (s_[1] + A * s_[0]))))));
                         float u = x - B * k_ * S;
                         u /= (1 + k_ * A * A * A * A * A * A * A * A);
-        
+
                         output.lp1 = TickLpTPT(u, s_[0], A);
                         output.lp2 = TickLpTPT(output.lp1, s_[1], A);
                         output.lp3 = TickLpTPT(output.lp2, s_[2], A);
@@ -338,7 +316,7 @@
                         output.lp6 = TickLpTPT(output.lp5, s_[5], A);
                         output.lp7 = TickLpTPT(output.lp6, s_[6], A);
                         output.lp8 = TickLpTPT(output.lp7, s_[7], A);
-        
+
                         return output;
                     }
                 </code>
@@ -379,13 +357,13 @@
                             u = t - std::sqrt(4*(s_-x)+t*t);
                         }
                         u /= 2;
-        
+
                         u = u / (1 + std::abs(u));
                         u *= g;
                         s_ += u;
                         float y = s_;
                         s_ += u;
-        
+
                         return y;
                     }
                 </code>
