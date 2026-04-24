@@ -45,7 +45,7 @@ body {
     box-shadow:
         inset 1px 1px 0 #000000,
         inset -1px -1px 0 #FFFFFF;
-    background-color: #f8f8f8;
+    background-color: #eeeeee;
     padding: 8px;
     overflow: auto;
 }
@@ -156,7 +156,7 @@ section {
     box-shadow:
         inset 1px 1px 0 #000000,
         inset -1px -1px 0 #FFFFFF;
-    background-color: #f8f8f8;
+    background-color: #eeeeee;
     padding: 8px;
     overflow: auto;
     margin: 8px 0;
@@ -186,7 +186,7 @@ th {
 }
 
 td {
-    background-color: #f8f8f8;
+    background-color: #eeeeee;
     border: 1px solid #808080;
     padding: 4px 8px;
 }
