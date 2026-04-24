@@ -1,33 +1,76 @@
-body{
-    background-color: rgb(221, 221, 221);
-    margin: 4px;
-    padding: 0;
+/* ============================================
+   Classic Windows 3D / Chicago Theme
+   Inspired by Windows 95 / Windows 98 UI
+   ============================================ */
+
+* {
+    box-sizing: border-box;
 }
 
-.no_warp{
+body {
+    background-color: #c0c0c0;
+    margin: 8px;
+    padding: 0;
+    font-family: "MS Sans Serif", "Microsoft Sans Serif", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 13px;
+    color: #000000;
+}
+
+.no_warp {
     display: inline-block;
 }
 
-.frame{
-    border-color: black;
-    border-style: solid;
-    border-width: 1px;
-    border-radius: 1px;
-    padding: 4px 4px;
-    margin: 4px 0px;
+/* ============================================
+   Classic Windows 3D Raised Frame
+   Used on div.frame elements (index page)
+   ============================================ */
+.frame {
+    border: 1px solid #808080;
+    box-shadow:
+        inset 1px 1px 0 #FFFFFF,
+        inset -1px -1px 0 #000000;
+    background-color: #c0c0c0;
+    padding: 8px 8px;
+    margin: 8px 0px;
     width: auto;
     overflow: auto;
 }
 
-.invisable{
+/* ============================================
+   Classic Windows 3D Sunken Frame
+   Used for code / pre blocks inside sections
+   ============================================ */
+.frame_sunken {
+    border: 1px solid #808080;
+    box-shadow:
+        inset 1px 1px 0 #000000,
+        inset -1px -1px 0 #FFFFFF;
+    background-color: #f8f8f8;
+    padding: 8px;
+    overflow: auto;
+}
+
+.invisable {
     display: none;
 }
 
-.hideable-btn{
+.hideable-btn {
     display: block;
+    background-color: #c0c0c0;
+    outline: 1px solid #000000;
+    border: 2px outset #ffffff;
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
 }
 
-img{
+.hideable-btn:active {
+    border-style: inset;
+    border-color: #808080;
+}
+
+img {
     display: block;
     margin-left: auto;
     margin-right: auto;
@@ -39,10 +82,10 @@ img{
 .centered {
     text-align: center;
     margin: 0;
-    color: blue;
+    color: #000080;
 }
 
-.flash-animation{
+.flash-animation {
     background-color: rgba(0, 255, 0, 0.5);
     animation: flash 2s ease-in-out infinite;
 }
@@ -56,79 +99,219 @@ img{
     }
 }
 
-*{
-    box-sizing: border-box;
-}
-
-/* button with 3d border */
-.button_3d {
-    background-color: #c0c0c0;
-    border: 2px outset #808080;
-    border-radius: 4px;
-    padding: 4px 8px;
-    margin: 4px 0px;
-}
-
-.button_3d:hover {
-    background-color: #d0d0d0;
-}
-
-.button_3d:active {
-    background-color: #b0b0b0;
-    border: 2px inset #808080;
-}
-
-/* 3d border like section */
+/* ============================================
+   Section — Classic Windows 3D Raised Border
+   The primary content container on every page
+   ============================================ */
 section {
-    border-top: 2px solid white;
-    border-left: 2px solid white;
-    border-bottom: 2px solid black;
-    border-right: 2px solid black;
-    margin: 4px 2px;
+    /* Outer bevel */
+    border: 1px solid #808080;
+    /* Inner bevel: top-left = white (highlight), bottom-right = black (shadow) */
+    box-shadow:
+        inset 1px 1px 0 #FFFFFF,
+        inset -1px -1px 0 #000000;
+    background-color: #c0c0c0;
+    margin: 6px 2px 8px 2px;
+    padding: 0;
 }
 
+/* ============================================
+   Section Title — Windows Title Bar Style
+   Sticky, with classic gradient-like gray
+   ============================================ */
 .section-title {
     position: sticky;
     top: 0;
-    
-    line-height: 0.5;
-    background-color: #dddddd;
-    padding: 16px 8px;
+
     margin: 0;
+    padding: 4px 8px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #ffffff;
+    background-color: #000080;
+
+    /* 3D sunken border inside the title bar */
+    border: 1px solid #808080;
+    box-shadow:
+        inset 1px 1px 0 #FFFFFF,
+        inset -1px -1px 0 #000000;
+
     z-index: 10;
+    line-height: 1.4;
 }
 
+/* ============================================
+   Section Content Area
+   ============================================ */
 .section_content {
-    padding: 0px 4px;
+    padding: 8px 8px;
     overflow: auto;
 }
 
-/* catalog css */
+/* ============================================
+   Pre / Code Blocks — Sunken 3D Effect
+   ============================================ */
+.section_content pre {
+    border: 1px solid #808080;
+    box-shadow:
+        inset 1px 1px 0 #000000,
+        inset -1px -1px 0 #FFFFFF;
+    background-color: #f8f8f8;
+    padding: 8px;
+    overflow: auto;
+    margin: 8px 0;
+}
+
+/* ============================================
+   Tables — Classic Windows 3D Raised Border
+   ============================================ */
+table {
+    border: 1px solid #808080;
+    box-shadow:
+        inset 1px 1px 0 #FFFFFF,
+        inset -1px -1px 0 #000000;
+    background-color: #c0c0c0;
+    border-collapse: separate;
+    border-spacing: 1px;
+}
+
+th {
+    background-color: #c0c0c0;
+    border: 1px solid #808080;
+    box-shadow:
+        inset 1px 1px 0 #FFFFFF,
+        inset -1px -1px 0 #000000;
+    padding: 4px 8px;
+    font-weight: bold;
+}
+
+td {
+    background-color: #f8f8f8;
+    border: 1px solid #808080;
+    padding: 4px 8px;
+}
+
+/* ============================================
+   Buttons — Classic Windows 3D Raised Style
+   ============================================ */
+.button_3d {
+    background-color: #c0c0c0;
+    outline: 1px solid #000000;
+    border: 2px outset #ffffff;
+    border-color: #FFFFFF #808080 #808080 #FFFFFF;
+    padding: 4px 12px;
+    margin: 4px 0px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.button_3d:hover {
+    background-color: #d4d4d4;
+}
+
+.button_3d:active {
+    background-color: #c0c0c0;
+    border: 2px inset #808080;
+    border-color: #808080 #FFFFFF #FFFFFF #808080;
+}
+
+/* ============================================
+   Catalog (Table of Contents) — Windows Dialog Style
+   ============================================ */
 .catalog-button {
     position: fixed;
     top: 0;
     right: 0;
     z-index: 1000;
-    background-color: #eeeeee;
-    padding: 8px;
+    background-color: #c0c0c0;
+    padding: 6px 8px;
     max-height: 100%;
     overflow-y: auto;
-    border-left: 1px solid black;
-    border-bottom: 1px solid black;
+
+    /* 3D raised border */
+    border: 1px solid #808080;
+    box-shadow:
+        inset 1px 1px 0 #FFFFFF,
+        inset -1px -1px 0 #000000;
+
+    font-size: 13px;
+    cursor: default;
 }
+
 .catalog-list {
     display: none;
     flex-direction: column;
-
     width: fit-content;
-    background-color: #eeeeee;
+    background-color: #c0c0c0;
+    padding: 4px 0;
 }
+
+.catalog-list a {
+    display: block;
+    padding: 3px 12px;
+    text-decoration: none;
+    color: #000000;
+}
+
+.catalog-list a:hover {
+    background-color: #000080;
+    color: #ffffff;
+}
+
 .catalog-button:hover .catalog-list {
     display: flex;
 }
 
+/* ============================================
+   Image Descriptions
+   ============================================ */
 .img_desc {
-    color: steelblue;
+    color: #000080;
     text-align: center;
-    margin: 0;
+    margin: 4px 0;
+}
+
+/* ============================================
+   Links
+   ============================================ */
+a {
+    color: #000080;
+    text-decoration: underline;
+}
+
+a:visited {
+    color: #800080;
+}
+
+/* ============================================
+   Horizontal Rule — Classic 3D Etched Style
+   ============================================ */
+hr {
+    border: none;
+    height: 2px;
+    background-color: #808080;
+    box-shadow:
+        0 1px 0 #FFFFFF,
+        inset 0 1px 0 #FFFFFF;
+    margin: 8px 0;
+}
+
+/* ============================================
+   Headings (outside sections, e.g. index page)
+   ============================================ */
+h1, h2, h3, h4 {
+    font-family: inherit;
+}
+
+h1 {
+    font-size: 18px;
+    font-weight: bold;
+    color: #000000;
+}
+
+h3 {
+    font-size: 14px;
+    font-weight: bold;
+    color: #000000;
 }
