@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IIR滤波器的线性相位补偿</title>
+
+    <link rel="stylesheet" href="../../main.css">
+    <!-- code -->
+    <link rel="stylesheet" href="../../highlight.css">
+    <script type="text/javascript" src="../../highlight.js"></script>
+    <script>hljs.highlightAll();</script>
+    <!-- math -->
+    <script type="text/javascript" src="../../latex.js"></script>
+</head>
+<body>
+    <div>
+        <a href="../../index.html">back</a>
+        <b>IIR滤波器的线性相位补偿</b>
+        <hr>
+    </div>
+
+    <section>
+        <h3 class="section-title">参考资料</h3>
+        <div class="section_content">
+            <a href="https://vicanek.de/articles/ReverseIIR.pdf" target="_blank">https://vicanek.de/articles/ReverseIIR.pdf</a><br>
+            <a href="https://github.com/ManasWolrd/qwqdsp/blob/main/tests/reverse_iir.cpp" target="_blank">https://github.com/ManasWolrd/qwqdsp/blob/main/tests/reverse_iir.cpp</a>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">对二阶形式的研究</h3>
+        <div class="section_content">
+            <p>vicanek在他的论文中描述了如何反转二阶形式的滤波器，我觉得有一点不好是那个a/b的系数，这样极点在实数轴上时会引发数值问题。</p>
+            <p>在我思路里滤波器全程均为实数，没有复数</p>
+
+            <hr>
+            <strong>论文中对一阶实数极点的分解模型：</strong>
+            <span>\[\frac{1}{1-cz^{-1}} \approx (1+cz^{-1})(1+c^2z^{-2})(1+c^4z^{-4})\dots\]</span>
+            <strong>因此对二阶实数极点的分解：</strong>
+            <span>
+                \[
+                H_{c.c.}(z) = \frac{1}{(1-cz^{-1})(1-\bar{c}z^{-1})} \approx \prod_{n=0}^{N-1} (1 + cz^{-2^n})(1 + \bar{c}z^{-2^n})
+                \]
+            </span>
+            <strong>通过结合共轭对可组成纯实数形式 <span>\( (1+cz^{-1})(1+\bar{c}z^{-1}) \)</span></strong>
+            <span>
+                \[
+                \frac{1}{(1-cz^{-1})(1-\bar{c}z^{-1})} \approx \prod_{n=0}^{N-1} \left( 1 + 2\text{Re}\{c^{2^n}\}z^{-2^n} + |c|^{2^{n+1}}z^{-2 \cdot 2^n} \right)
+                \]
+            </span>
+            <strong>施加时间反转之后，可以得到FIR滤波器形式为</strong>
+            <span>
+                \[
+                H_{rev}(z) \approx \prod_{n=0}^{N-1} \left( |c|^{2^{n+1}} + 2\text{Re}\{c^{2^n}\}z^{-2^n} + z^{-2 \cdot 2^n} \right)
+                \]
+            </span>
+
+            <hr>
+            <p>论文中是以极点为基础讨论的，这里将其对应到经典的 Biquad 形式：</p>
+            <span>
+                \[
+                H(z)=\frac{b_0+b_1z^{-1}+b_2z^{-2}}{1+a_1z^{-1}+a_2z^{-2}}
+                \]
+            </span>
+            <p>我们利用分母系数 \(a_1, a_2\) 进行推导。对应的复共轭极点形式为：</p>
+            <span>
+                \[
+                H_{c.c.}(z) = \frac{1}{(1-cz^{-1})(1-\bar{c}z^{-1})} = \frac{1}{1 + a_1z^{-1} + a_2z^{-2}}
+                \]
+            </span>
+            <p>由此可得初始状态（第 0 阶）极点的实部与模长平方：</p>
+            <span>
+                \[ \operatorname{Re}\{c_0\} = -a_1/2, \quad |c_0|^2 = a_2 \]
+            </span>
+
+            <p>通过倍角公式迭代计算第 \(i\) 阶 FIR 单元的系数。令第 \(i\) 阶极点为 \(c_i = c_0^{2^i}\)，其迭代逻辑为：</p>
+            <ul>
+                <li>
+                    <strong>实部迭代：</strong>
+                    <span>\[ \operatorname{Re}\{c_{i+1}\} = 2(\operatorname{Re}\{c_i\})^2 - |c_i|^2 \]</span>
+                </li>
+                <li>
+                    <strong>模长平方迭代：</strong>
+                    <span>\[ |c_{i+1}|^2 = (|c_i|^2)^2 \]</span>
+                </li>
+            </ul>
+
+            <p>最终，第 \(i\) 阶反转 FIR 单元（对应延迟 \(k=2^i\)）的系数为：</p>
+            <span>
+                \[
+                H_{i}(z) = |c_i|^2 + 2\operatorname{Re}\{c_i\}z^{-k} + z^{-2k}
+                \]
+            </span>
+            <p>
+                <pre style="font-family:Consolas,monospace;">
+                    x[n] ──┬──────────[z⁻ᵏ]──────────┬──────────[z⁻ᵏ]──────────┬──▶
+                           │                         │                         │
+                           │                         │                         │
+                           │                         │                         │
+                          (×)                       (×)                       (×)
+                           │                         │                         │
+                           │                         │                         │
+                         |cᵢ|²                   2·Re{cᵢ}                      1
+                           │                         │                         │
+                           │                         │                         │
+                           └─────────────┬───────────┴─────────────┬───────────┘
+                                         │                         │
+                                         └────────── (+) ──────────┘
+                                                      │
+                                                      ▼
+                                                     y[n]
+                </pre>
+            </p>
+            <p>将上述 \(N\) 个单元级联，即可得到截断长度为 \(2^N\) 的反转滤波器近似。</p>
+        </div>
+    </section>
+
+    <section>
+       <h3 class="section-title">应用</h3>
+       <div class="section_content">
+           <p>首先有一个IIR滤波器，然后将滤波器中一半的极点替换为反转滤波器，就可以获得一个近似线性相位的IIR滤波器了，可喜可贺</p>
+       </div>
+   </section>
+
+    <!-- <section>
+        <h3 class="section-title">评论</h3>
+        <div class="section_content">
+            <script src="https://utteranc.es/client.js"
+                repo="a5632645/a5632645.github.io"
+                issue-term="pathname"
+                theme="github-light"
+                crossorigin="anonymous"
+                async>
+            </script>
+        </div>
+    </section> -->
+    <script src="../../main.js"></script>
+</body>
+</html>
