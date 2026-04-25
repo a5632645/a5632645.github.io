@@ -44,7 +44,7 @@
             slider.type = 'range';
             slider.name = 'wc';
             slider.id = containerId +'wc_slider';
-            slider.min = "0"; 
+            slider.min = "0";
             slider.max = "1";
             slider.step = "0.001";
             slider.value = initialWc;
@@ -69,7 +69,7 @@
             const MIN_DB = -60;
             const MAX_DB = 10;
             const MIN_GAIN = Math.pow(10, MIN_DB / 20);
-            
+
             const W_MIN = 0.00001;
             const W_MAX = Math.PI - 0.01;
             const LOG_W_BEGIN = Math.log(W_MIN);
@@ -79,16 +79,16 @@
                 const sliderValue = parseFloat(slider.value);
                 const log_wc = LOG_W_BEGIN + sliderValue * (LOG_W_END - LOG_W_BEGIN);
                 const wc = Math.exp(log_wc);
-                
+
                 label.textContent = `wc: ${wc}`;
 
                 ctx.clearRect(0, 0, width, height);
                 ctx.beginPath();
                 ctx.strokeStyle = 'blue';
                 ctx.lineWidth = 2;
-                
+
                 let first_point = true;
-                
+
                 for (let i = 0; i < width; ++i) {
                     const norm = i / width;
                     const log_w = LOG_W_BEGIN + norm * (LOG_W_END - LOG_W_BEGIN);
@@ -101,8 +101,8 @@
                     }
 
                     const x = i;
-                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
-                    
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB);
+
                     if (first_point) {
                         ctx.moveTo(x, y);
                         first_point = false;
@@ -113,7 +113,7 @@
                 }
                 ctx.stroke();
             }
-            
+
             slider.addEventListener('input', drawResponse);
             drawResponse();
         }
@@ -137,7 +137,7 @@
             slider.type = 'range';
             slider.name = 'wc';
             slider.id = containerId + 'wc_slider';
-            slider.min = "0"; 
+            slider.min = "0";
             slider.max = "1";
             slider.step = "0.001";
             slider.value = initialWc;
@@ -152,7 +152,7 @@
             sliderQ.type = 'range';
             sliderQ.name = 'Q';
             sliderQ.id = containerId + 'Q_slider';
-            sliderQ.min = "0.1"; 
+            sliderQ.min = "0.1";
             sliderQ.max = "10";
             sliderQ.step = "0.1";
             sliderQ.value = initQ;
@@ -177,7 +177,7 @@
             const MIN_DB = -60;
             const MAX_DB = 30;
             const MIN_GAIN = Math.pow(10, MIN_DB / 20);
-            
+
             const W_MIN = 0.00001;
             const W_MAX = Math.PI - 0.01;
             const LOG_W_BEGIN = Math.log(W_MIN);
@@ -188,7 +188,7 @@
                 const log_wc = LOG_W_BEGIN + sliderValue * (LOG_W_END - LOG_W_BEGIN);
                 const wc = Math.exp(log_wc);
                 const Q = parseFloat(sliderQ.value);
-                
+
                 label.textContent = `wc: ${wc}`;
                 labelQ.textContent = `Q: ${Q}`;
 
@@ -209,8 +209,8 @@
                     }
 
                     const x = i;
-                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
-                    
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB);
+
                     if (first_point) {
                         ctx.moveTo(x, y);
                         first_point = false;
@@ -239,8 +239,8 @@
                     }
 
                     const x = i;
-                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
-                    
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB);
+
                     if (first_point) {
                         ctx.moveTo(x, y);
                         first_point = false;
@@ -260,7 +260,7 @@
                 ctx.fillStyle = 'red';
                 ctx.fillText(filter_responce_name2, width, 24);
             }
-            
+
             slider.addEventListener('input', drawResponse);
             sliderQ.addEventListener('input', drawResponse);
             drawResponse();
@@ -281,7 +281,7 @@
             slider.type = 'range';
             slider.name = 'wc';
             slider.id = containerId + 'wc_slider';
-            slider.min = "0"; 
+            slider.min = "0";
             slider.max = "1";
             slider.step = "0.001";
             slider.value = initialWc;
@@ -296,7 +296,7 @@
             sliderQ.type = 'range';
             sliderQ.name = 'Q';
             sliderQ.id = containerId + 'Q_slider';
-            sliderQ.min = "0.1"; 
+            sliderQ.min = "0.1";
             sliderQ.max = "10";
             sliderQ.step = "0.1";
             sliderQ.value = initQ;
@@ -311,7 +311,7 @@
             sliderDb.type = 'range';
             sliderDb.name = 'db';
             sliderDb.id = containerId + 'db_slider';
-            sliderDb.min = "-20"; 
+            sliderDb.min = "-20";
             sliderDb.max = "20";
             sliderDb.step = "0.1";
             sliderDb.value = initDb;
@@ -336,7 +336,7 @@
             const MIN_DB = -60;
             const MAX_DB = 30;
             const MIN_GAIN = Math.pow(10, MIN_DB / 20);
-            
+
             const W_MIN = 0.00001;
             const W_MAX = Math.PI - 0.01;
             const LOG_W_BEGIN = Math.log(W_MIN);
@@ -348,7 +348,7 @@
                 const wc = Math.exp(log_wc);
                 const Q = parseFloat(sliderQ.value);
                 const dbf = parseFloat(sliderDb.value);
-                
+
                 label.textContent = `wc: ${wc}`;
                 labelQ.textContent = `Q: ${Q}`;
                 labelDb.textContent = `db: ${dbf}`;
@@ -370,8 +370,8 @@
                     }
 
                     const x = i;
-                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
-                    
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB);
+
                     if (first_point) {
                         ctx.moveTo(x, y);
                         first_point = false;
@@ -400,8 +400,8 @@
                     }
 
                     const x = i;
-                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB); 
-                    
+                    const y = (db - MAX_DB) * height / (MIN_DB - MAX_DB);
+
                     if (first_point) {
                         ctx.moveTo(x, y);
                         first_point = false;
@@ -421,7 +421,7 @@
                 ctx.fillStyle = 'red';
                 ctx.fillText('Biquad', width, 24);
             }
-            
+
             slider.addEventListener('input', drawResponse);
             sliderQ.addEventListener('input', drawResponse);
             sliderDb.addEventListener('input', drawResponse);
@@ -454,17 +454,17 @@
                     let b0 = k / (1 + k);
                     let b1 = b0;
                     let a1 = (k - 1) / (k + 1);
-        
+
                     let re = Math.cos(w);
                     let im = Math.sin(w);
                     let re2 = re * re - im * im;
                     let im2 = 2 * re * im;
-        
+
                     let up_re = re * b0 + b1;
                     let up_im = im * b0;
                     let down_re = 1 + a1 * re;
                     let down_im = a1 * im;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -488,12 +488,12 @@
                     let k = Math.tan(wc / 2);
                     let w_analog = Math.tan(w / 2);
                     let wc_analog = k;
-        
+
                     let up_re = wc_analog;
                     let up_im = 0;
                     let down_re = wc_analog;
                     let down_im = w_analog;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -502,7 +502,7 @@
                 });
             </script>
             <hr>
-        
+
             a bilinear lowpass analog
             <p>\[H(s)=\frac{1}{s^2+\frac{s}{Q}+1}\]</p>
             we can use
@@ -514,12 +514,12 @@
                     let wc_analog = Math.tan(wc / 2);
                     let w_analog = Math.tan(w / 2);
                     let s_im = w_analog / wc_analog;
-        
+
                     let up_re = 1;
                     let up_im = 0;
                     let down_re = 1 - s_im * s_im;
                     let down_im = s_im / Q;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -539,17 +539,17 @@
                     b2 *= inva0;
                     a1 *= inva0;
                     a2 *= inva0;
-        
+
                     let re = Math.cos(w);
                     let im = Math.sin(w);
                     let re2 = re * re - im * im;
                     let im2 = 2 * re * im;
-        
+
                     let up_re = b0 * re2 + b1 * re + b2;
                     let up_im = b0 * im2 + b1 * im;
                     let down_re = re2 + a1 * re + a2;
                     let down_im = im2 + a1 * im;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -558,7 +558,7 @@
                 });
             </script>
             <hr>
-            
+
             a bilinear highpass analog
             <p>\[H(s)=\frac{s^2}{s^2+\frac{s}{Q}+1}\]</p>
             <div id="filter4"></div>
@@ -568,12 +568,12 @@
                     let wc_analog = Math.tan(wc / 2);
                     let w_analog = Math.tan(w / 2);
                     let s_im = w_analog / wc_analog;
-        
+
                     let up_re = -s_im * s_im;
                     let up_im = 0;
                     let down_re = 1 - s_im * s_im;
                     let down_im = s_im / Q;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -594,17 +594,17 @@
                     b2 *= inva0;
                     a1 *= inva0;
                     a2 *= inva0;
-        
+
                     let re = Math.cos(w);
                     let im = Math.sin(w);
                     let re2 = re * re - im * im;
                     let im2 = 2 * re * im;
-        
+
                     let up_re = b0 * re2 + b1 * re + b2;
                     let up_im = b0 * im2 + b1 * im;
                     let down_re = re2 + a1 * re + a2;
                     let down_im = im2 + a1 * im;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -614,7 +614,7 @@
                 );
             </script>
             <hr>
-        
+
             a bilinear highpass one pole analog
             <p>\[H(s)=\frac{s}{s+1}\]</p>
             <div id="filter5"></div>
@@ -624,12 +624,12 @@
                     let wc_analog = Math.tan(wc / 2);
                     let w_analog = Math.tan(w / 2);
                     let s_im = w_analog / wc_analog;
-        
+
                     let up_re = 0;
                     let up_im = s_im;
                     let down_re = 1;
                     let down_im = s_im;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -643,17 +643,17 @@
                     let b2 = 0;
                     let a1 = (k - 1) / (k + 1);
                     let a2 = 0;
-        
+
                     let re = Math.cos(w);
                     let im = Math.sin(w);
                     let re2 = re * re - im * im;
                     let im2 = 2 * re * im;
-        
+
                     let up_re = b0 * re2 + b1 * re + b2;
                     let up_im = b0 * im2 + b1 * im;
                     let down_re = re2 + a1 * re + a2;
                     let down_im = im2 + a1 * im;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -663,7 +663,7 @@
                 );
             </script>
             <hr>
-        
+
             a bilinear bandpass
             <p>\[H(s)=\frac{s}{s^2+\frac{s}{Q}+1}\]</p>
             <div id="filter6"></div>
@@ -673,12 +673,12 @@
                     let wc_analog = Math.tan(wc / 2);
                     let w_analog = Math.tan(w / 2);
                     let s_im = w_analog / wc_analog;
-        
+
                     let up_re = 0;
                     let up_im = s_im;
                     let down_re = 1 - s_im * s_im;
                     let down_im = s_im / Q;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -699,17 +699,17 @@
                     b2 *= inva0;
                     a1 *= inva0;
                     a2 *= inva0;
-        
+
                     let re = Math.cos(w);
                     let im = Math.sin(w);
                     let re2 = re * re - im * im;
                     let im2 = 2 * re * im;
-        
+
                     let up_re = b0 * re2 + b1 * re + b2;
                     let up_im = b0 * im2 + b1 * im;
                     let down_re = re2 + a1 * re + a2;
                     let down_im = im2 + a1 * im;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -719,7 +719,7 @@
                 );
             </script>
             <hr>
-        
+
             a bilinear peak
             <p>\[H(s)=\frac{s}{s^2+\frac{s}{Q}+1}\]</p>
             <div id="filter7"></div>
@@ -730,12 +730,12 @@
                     let wc_analog = Math.tan(wc / 2);
                     let w_analog = Math.tan(w / 2);
                     let s_im = w_analog / wc_analog;
-        
+
                     let up_re = 1 - s_im * s_im;
                     let up_im = s_im * A / Q;
                     let down_re = 1 - s_im * s_im;
                     let down_im = s_im / Q / A;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -757,17 +757,17 @@
                     b2 *= inva0;
                     a1 *= inva0;
                     a2 *= inva0;
-        
+
                     let re = Math.cos(w);
                     let im = Math.sin(w);
                     let re2 = re * re - im * im;
                     let im2 = 2 * re * im;
-        
+
                     let up_re = b0 * re2 + b1 * re + b2;
                     let up_im = b0 * im2 + b1 * im;
                     let down_re = re2 + a1 * re + a2;
                     let down_im = im2 + a1 * im;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -777,7 +777,7 @@
                 );
             </script>
             <hr>
-        
+
             a bilinear lowshelf
             <p>\[H(s)=A\frac{s^2+\frac{\sqrt{A}}{Q}s+A}{As^2+\frac{\sqrt{A}}{Q}s+1}\]</p>
             <div id="filter8"></div>
@@ -789,12 +789,12 @@
                     let wc_analog = Math.tan(wc / 2);
                     let w_analog = Math.tan(w / 2);
                     let s_im = w_analog / wc_analog;
-        
+
                     let up_re = A * (A - s_im * s_im);
                     let up_im = A * (s_im * sqrt_A / Q);
                     let down_re = 1 - A * s_im * s_im;
                     let down_im = s_im * sqrt_A / Q;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -817,17 +817,17 @@
                     b2 *= inva0;
                     a1 *= inva0;
                     a2 *= inva0;
-        
+
                     let re = Math.cos(w);
                     let im = Math.sin(w);
                     let re2 = re * re - im * im;
                     let im2 = 2 * re * im;
-        
+
                     let up_re = b0 * re2 + b1 * re + b2;
                     let up_im = b0 * im2 + b1 * im;
                     let down_re = re2 + a1 * re + a2;
                     let down_im = im2 + a1 * im;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -854,11 +854,11 @@
                     let wc_analog = Math.tan(wc / 2);
                     let w_analog = Math.tan(w / 2);
                     let x = w_analog / wc_analog;
-        
+
                     let sqrt_up = Q;
                     let t = (x * x - 1);
                     let down = x * x + Q * Q * t * t;
-        
+
                     let g = sqrt_up / Math.sqrt(down);
                     return g;
                 }, (wc, Q, w)=>{
@@ -875,17 +875,17 @@
                     b2 *= inva0;
                     a1 *= inva0;
                     a2 *= inva0;
-        
+
                     let re = Math.cos(w);
                     let im = Math.sin(w);
                     let re2 = re * re - im * im;
                     let im2 = 2 * re * im;
-        
+
                     let up_re = b0 * re2 + b1 * re + b2;
                     let up_im = b0 * im2 + b1 * im;
                     let down_re = re2 + a1 * re + a2;
                     let down_im = im2 + a1 * im;
-        
+
                     let down = down_re * down_re + down_im * down_im;
                     let z_re = up_re * down_re + up_im * down_im;
                     let z_im = up_im * down_re - up_re * down_im;
@@ -907,11 +907,11 @@
                         let wc_analog = Math.tan(wc / 2);
                         let w_analog = Math.tan(w / 2);
                         let x = w_analog / wc_analog;
-        
+
                         let sqrt_up = Q;
                         let t = (x * x - 1);
                         let down = x * x + Q * Q * t * t;
-        
+
                         let g = sqrt_up / Math.sqrt(down);
                         return g;
                     },
@@ -929,7 +929,7 @@
                         b2 *= inva0;
                         a1 *= inva0;
                         a2 *= inva0;
-        
+
                         let sin_w_half = Math.sin(w / 2);
                         let ph1 = sin_w_half * sin_w_half;
                         let ph0 = 1 - ph1;
@@ -943,7 +943,7 @@
                         let up = B0 * ph0 + B1 * ph1 + B2 * ph2;
                         let down = A0 * ph0 + A1 * ph1 + A2 * ph2;
                         let g = Math.sqrt(up / down);
-                        
+
                         return g;
                     },
                     "AnalogBiQuad", "BiquadPower"

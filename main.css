@@ -194,23 +194,23 @@ td {
 /* ============================================
    Buttons — Classic Windows 3D Raised Style
    ============================================ */
-.button_3d {
+button {
     background-color: #c0c0c0;
     outline: 1px solid #000000;
     border: 2px outset #ffffff;
     border-color: #FFFFFF #808080 #808080 #FFFFFF;
-    padding: 4px 12px;
-    margin: 4px 0px;
+    padding: 2px 12px;
+    margin: 2px 0px;
     font-family: inherit;
     font-size: 13px;
     cursor: pointer;
 }
 
-.button_3d:hover {
+button:hover {
     background-color: #d4d4d4;
 }
 
-.button_3d:active {
+button:active {
     background-color: #c0c0c0;
     border: 2px inset #808080;
     border-color: #808080 #FFFFFF #FFFFFF #808080;
