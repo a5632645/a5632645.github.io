@@ -10,8 +10,20 @@
     <body>
         <h1>qwq/a5632645/mana website</h1>
         <p>makeing projects with Audio</p>
-        <a href="https://www.youtube.com/@mana-56113">youtube</a>
-        <a href="https://space.bilibili.com/280060985">bilibili</a>
+        <button
+            onclick="
+                window.location.href = 'https://www.youtube.com/@mana-56113'
+            "
+        >
+            youtube
+        </button>
+        <button
+            onclick="
+                window.location.href = 'https://space.bilibili.com/280060985'
+            "
+        >
+            bilibili
+        </button>
 
         <section>
             <h3 class="section-title">pages</h3>
@@ -25,92 +37,7 @@
                             <th>Delta Days</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr>
-                            <td>2026-4-25</td>
-                            <td>2026-4-25</td>
-                            <td><a href="2026/reverse_iir/index.html">IIR滤波器的线性相位补偿</a></td>
-                        </tr>
-                        <tr>
-                            <td>2026-4-11</td>
-                            <td>2026-4-11</td>
-                            <td><a href="2026/quick_clangd/index.html">快速制作一个单片机能用的.clangd</a></td>
-                        </tr>
-                        <tr>
-                            <td>2025-12-17</td>
-                            <td>2026-1-10</td>
-                            <td><a href="2025/usb/index.html">usb学习记录</a></td>
-                        </tr>
-                        <tr>
-                            <td>2025-12-07</td>
-                            <td>2025-12-15</td>
-                            <td><a href="2025/gd32_ipa/index.html">gd32h757hzmt6 IPA调教</a></td>
-                        </tr>
-                        <tr>
-                            <td>2025-11-1</td>
-                            <td>2025-11-1</td>
-                            <td>
-                                <a href="2025/zed_cmake_script/index.html">zed cmake 任务脚本</a>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>2025-11-1</td>
-                            <td>2025-11-1</td>
-                            <td>
-                                <a
-                                    href="2025/another_frequency_responce/another_filter_responce.html"
-                                    >另一种频率响应计算</a
-                                >
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>2025-11-1</td>
-                            <td>2025-12-28</td>
-                            <td>
-                                <a href="2025/tpt-filter/index.html"
-                                    >TPT滤波器设计总结</a
-                                >
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>2025-8-1</td>
-                            <td>2025-12-11</td>
-                            <td>
-                                <a href="2025/filter-design/main.html"
-                                    >滤波器设计学习</a
-                                >
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>2025-7-1</td>
-                            <td>2025-7-1</td>
-                            <td>
-                                <a href="2025/usb-midi/main.html"
-                                    >制作一个usb-midi转换器</a
-                                >
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>2025-7-1</td>
-                            <td>2025-7-1</td>
-                            <td><a href="2025/mcu/mcu.html">单片机</a></td>
-                        </tr>
-                        <tr>
-                            <td>2025-7-1</td>
-                            <td>2025-7-1</td>
-                            <td><a href="2025/dsp/dsp.html">Legacy DSP</a></td>
-                        </tr>
-                        <tr>
-                            <td>2025-6-1</td>
-                            <td>2025-6-1</td>
-                            <td><a href="2025/windows/windows.html">windows技巧</a></td>
-                        </tr>
-                        <tr>
-                            <td>2025-6-1</td>
-                            <td>2025-6-1</td>
-                            <td><a href="2025/burg/burg.html">实时Burg线性预测</a></td>
-                        </tr>
-                    </tbody>
+                    <tbody id="pages-tbody"></tbody>
                 </table>
             </div>
         </section>
@@ -118,15 +45,9 @@
         <section>
             <h3 class="section-title">goodthings</h3>
             <div class="section_content">
-            <table border="1">
-                <tbody>
-                    <tr><td><a target="_blank" href="https://zhuanlan.zhihu.com/p/682286231">C++ memory order以及cpu真正结构</a></td></tr>
-                    <tr><td><a target="_blank" href="https://www.native-instruments.com/fileadmin/ni_media/downloads/pdf/VAFilterDesign_2.1.2.pdf">VA滤波器设计.pdf</a></td></tr>
-                    <tr><td><a href="https://www.katjaas.nl/home/home.html" target="_blank">katjaas dsp</a></td></tr>
-                    <tr><td><a href="http://mpex.prosoniq.com/" target="_blank">MPEX时间拉伸/音高移动，见识一下相位保留完好的</a></td></tr>
-                    <tr><td><a href="https://github.com/liuanlin-mx/MXTune" target="_blank">开源Autotune</a></td></tr>
-                </tbody>
-            </table>
+                <table border="1">
+                    <tbody id="goodthings-tbody"></tbody>
+                </table>
             </div>
         </section>
 
@@ -145,57 +66,18 @@
         <section>
             <h3 class="section-title">评论</h3>
             <div class="section_content">
-                <script src="https://utteranc.es/client.js"
+                <script
+                    src="https://utteranc.es/client.js"
                     repo="a5632645/a5632645.github.io"
                     issue-term="pathname"
                     theme="github-light"
                     crossorigin="anonymous"
-                    async>
-                </script>
+                    async
+                ></script>
             </div>
         </section>
 
-        <script>
-            let page_table = document.querySelectorAll(".page_table tbody tr");
-            let delta_days_array = [];
-            for (let i = 0; i < page_table.length; i++) {
-                let update_date = page_table[i].children[1].textContent;
-                let date_arr = update_date.split("-");
-                let year = date_arr[0];
-                let month = date_arr[1];
-                let day = date_arr[2];
-                let date = new Date(year, month - 1, day);
-                let current_date = new Date();
-                let delta_date = Math.abs(current_date.getTime() - date.getTime());
-                let delta_days = Math.floor(delta_date / (1000 * 60 * 60 * 24));
-
-                let delta_days_td = page_table[i].appendChild(document.createElement("td"));
-                delta_days_td.textContent = `${delta_days} days`;
-                if (delta_days < 30) {
-                    delta_days_td.style.color = "green";
-                }
-                else if (delta_days < 60) {
-                    delta_days_td.style.color = "#806610";
-                }
-                else if (delta_days < 90) {
-                    delta_days_td.style.color = "grey";
-                }
-                else {
-                    delta_days_td.style.color = "black";
-                }
-
-                delta_days_array.push({
-                    "delta_days": delta_days,
-                    "delta_days_td": delta_days_td
-                });
-            }
-
-            delta_days_array.sort((a, b) => a.delta_days - b.delta_days);
-            let table_body = document.querySelector(".page_table tbody");
-            table_body.innerHTML = "";
-            for (let i = 0; i < delta_days_array.length; i++) {
-                table_body.appendChild(delta_days_array[i].delta_days_td.parentElement);
-            }
-        </script>
+        <script src="js/pages.js"></script>
+        <script src="js/goodthings.js"></script>
     </body>
 </html>
