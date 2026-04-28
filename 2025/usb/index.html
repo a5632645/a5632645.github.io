@@ -14,14 +14,6 @@
     <script type="text/javascript" src="../../latex.js"></script>
 </head>
 <body>
-    <style>
-        code {
-            background-color: #eee;
-        }
-        pre {
-            background-color: #eee;
-        }
-    </style>
     <div>
         <button onclick="window.location.href='../../index.html'">back</button>
         <b>usb学习记录</b>
@@ -31,7 +23,7 @@
     <section>
         <h3 class="section-title">bus hound</h3>
         <div class="section_content">
-            <a href="https://www.cnblogs.com/xuejiangqiang/p/16582396.html">more</a>
+            <a href="https://www.cnblogs.com/xuejiangqiang/p/16582396.html">更多错误查看这个blog</a>
             <table border="1">
                 <thead>
                     <tr>
@@ -46,12 +38,13 @@
                     </tr>
                     <tr>
                         <td>xact error</td>
-                        <td>硬件usb外设配置有问题</td>
+                        <td>从机硬件usb外设配置有问题，host的硬件没收到数据</td>
                     </tr>
                 </tbody>
             </table>
         </div>
     </section>
+
     <section>
         <h3 class="section-title">UAC2</h3>
         <div class="section_content">
@@ -92,11 +85,7 @@
                         <td>RANGE(2)</td>
                         <td>CS_SAM_FREQ_CONTROL(0x01)</td>
                         <td>传采样率表，格式
-                            <code>
-                                uint16 count,
-                                [{uint32 min=fs, uint32 max=fs, uint32 res=0}
-                                ...]
-                            </code>
+                            <pre>uint16 count,[{uint32 min=fs, uint32 max=fs, uint32 res=0},...]</pre>
                             min max一样，step必须是0
                         </td>
                     </tr>
@@ -132,19 +121,29 @@
                     <tr>
                         <td>GET</td>
                         <td rowspan="2">RANGE(2)</td>
-                        <td>传<code>uint16 count [uint16 min, uint16 max, uint16 step]</code>。0x8001(-127.9961dB)~0x7fff(127.9961dB),step从0x00001(1/256dB)~0x7fff(127.9961dB)</td>
+                        <td>传<pre>uint16 count,[{uint16 min, uint16 max, uint16 step},...]</pre>0x8001(-127.9961dB)~0x7fff(127.9961dB),step从0x00001(1/256dB)~0x7fff(127.9961dB)</td>
                     </tr>
                 </tbody>
             </table>
             <hr>
         </div>
+
         <div class="section_content">
             <h3>AudioStream接口请求</h3>
+            <p>暂无</p>
             <hr>
         </div>
+
+        <div class="section_content">
+            <h3>AudioControl接口汇报实体参数改变</h3>
+            <p>TODO</p>
+            <hr>
+        </div>
+
         <div class="section_content">
             <h3>反馈速率转换</h3>
             <p>省流：把你的采样率（每秒多少个样本）转换为（每帧/微帧）多少个样本。</p>
+
             <p>高速：4(unused) 12(整数部分).13(小数部分) 3(optional)</p>
             <pre>
                 <code>
@@ -168,6 +167,7 @@ void Hs(uint32_t sample_rate, uint8_t buffer[4]) {
 }
                 </code>
             </pre>
+
             <p>全速：10(整数部分).10(小数部分) 4(optional)</p>
             <pre>
                 <code>
@@ -181,6 +181,7 @@ void Fs(uint32_t sample_rate, uint8_t buffer[3]) {
 }
                 </code>
             </pre>
+
             <p>或许你想要<a href="https://www.usb.org/document-library/usb-20-specification">原文</a>，usb2.0规范102页</p>
             <pre>
     In summary, for full-speed endpoints, the Ff
@@ -198,8 +199,33 @@ be optionally used to extend the precision of Ff
 , otherwise, they shall be reported as zero.
             </pre>
             <hr>
+
+            <h3>多通道麦克风</h3>
+            <table>
+                <thead>
+                    <th>现象</th>
+                    <th>可能的解决方案</th>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>我明明设置了最高采样率是96kHz为什么看不到</td>
+                        <td>
+                            我猜你的端点最大字长和interval是根据采样率计算的，封顶就是这个速率，可以试着把字长加大或者interval减小
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>我无法在windows里调节采样率，即使有多个可选采样率</td>
+                        <td>请把AudioControl接口和Stream接口里的bmChannelConfig设为0x00试试</td>
+                    </tr>
+                    <tr>
+                        <td>bus hound中显示有数据，且数据速率与理论速率也一致，但audacity录制指示器一直在0</td>
+                        <td>试着使用问题1的自动计算最大字长和interval，可能要减小最大速率?</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </section>
+
     <section>
         <h3 class="section-title">CDC ACM</h3>
         <div class="section_content">
@@ -277,6 +303,7 @@ bit1: RTS
             <hr>
         </div>
     </section>
+
     <section>
         <h3 class="section-title">HID</h3>
         <div class="section_content">
@@ -334,6 +361,7 @@ bit1: RTS
             </table>
         </div>
     </section>
+
     <section>
         <h3 class="section-title">评论</h3>
         <div class="section_content">
@@ -346,6 +374,7 @@ bit1: RTS
             </script>
         </div>
     </section>
+
     <script src="../../main.js"></script>
     <script>
         let timer = setInterval(function() {
