@@ -23,7 +23,7 @@
     <section>
         <h3 class="section-title">预备工作</h3>
         <div class="section_content">
-            <p>我将不使用rtthread studio，隐藏流程不利于排错</p>
+            <p>我将不使用rtthread studio，隐藏流程不利于排错。实际上是我编译不通过。</p>
             <a href="https://github.com/RT-Thread-Studio/sdk-bsp-ra8p1-titan-mini">下载源代码</a>
         </div>
     </section>
@@ -46,6 +46,28 @@ scons
             <hr>
 
             <p>下载成功后，松开boot键，按reset键，就能看到板子上的led灯闪烁了</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">让我的clangd工作</h3>
+        <div class="section_content">
+            <p>scons可以生成cmake，cmake可以生成complier_commands.json来让clangd工作</p>
+            <pre>
+scons --target=cmake
+cmake -S . -B ../../build -G "Ninja"
+            </pre>
+            <p>之所以把build设在根目录，是因为你也不想换一个工程就要重新写.clangd配置文件吧</p>
+            <p>好吧，重写.clangd配置文件也非常简单罢了</p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">瑞萨FSP</h3>
+        <div class="section_content">
+            <a href="https://github.com/renesas/fsp/releases">下载瑞萨FSP</a>
+            <p>e2 studio是瑞萨的IDE，smart configuration是一个配置工具</p>
+            <p><b>你需要一个my瑞萨账号才能使用上述工具</b></p>
         </div>
     </section>
 
