@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>玩 rtthread titan mini</title>
+
+    <link rel="stylesheet" href="../../main.css">
+    <!-- code -->
+    <link rel="stylesheet" href="../../highlight.css">
+    <script type="text/javascript" src="../../highlight.js"></script>
+    <script>hljs.highlightAll();</script>
+    <!-- math -->
+    <script type="text/javascript" src="../../latex.js"></script>
+</head>
+<body>
+    <div>
+        <button onclick="window.location.href='../../index.html'">back</button>
+        <b>玩 rtthread titan mini</b>
+        <hr>
+    </div>
+
+    <section>
+        <h3 class="section-title">预备工作</h3>
+        <div class="section_content">
+            <p>我将不使用rtthread studio，隐藏流程不利于排错</p>
+            <a href="https://github.com/RT-Thread-Studio/sdk-bsp-ra8p1-titan-mini">下载源代码</a>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">编译和下载GPIO历程</h3>
+        <div class="section_content">
+            <pre>
+cd sdk-bsp-ra8p1-titan-mini-1.0.1\project\Titan_Mini_blink_led
+scons
+            </pre>
+            <p>好了，现在在目录下就应该生成程序了</p>
+            <hr>
+
+            <p>我没有ARM调试器，所以通过瑞萨软件下载</p>
+            <p><a href="https://www.renesas.cn/zh/software-tool/renesas-flash-programmer-programming-gui">下载瑞萨编程软件</a> 语言调成英文，中文网站会卡在cloudflare验证</p>
+            <p>按住板子上的usr(boot)键，再按reset。<b>注意，全程都要按住boot键不然板子会自动重启。</b></p>
+            <p>接下来就能用编程软件下载了</p>
+            <img src="program_gui.png" alt="program_gui">
+            <hr>
+
+            <p>下载成功后，松开boot键，按reset键，就能看到板子上的led灯闪烁了</p>
+        </div>
+    </section>
+
+    <script src="../../main.js"></script>
+</body>
+</html>

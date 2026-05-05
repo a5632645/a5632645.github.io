@@ -1,5 +1,11 @@
 const pages = [
   {
+    create_date: "2026-5-4",
+    update_date: "2026-5-5",
+    title: "玩 rtthread titan mini",
+    href: "2026/titan_mini/index.html"
+  },
+  {
     create_date: "2026-4-25",
     update_date: "2026-4-25",
     title: "IIR滤波器的线性相位补偿",
