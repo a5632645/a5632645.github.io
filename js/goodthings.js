@@ -23,6 +23,10 @@ const goodthings = [
     title: "早期的音高移动/时间拉伸算法大比拼",
     href: "https://web.archive.org/web/20260120145824/https://fr.audiofanzine.com/pitch-shifter-time-stretcher/editorial/dossiers/de-l-etirement-et-de-la-hauteur-partie-1.html",
   },
+  {
+    title: "随机信号处理学习入门",
+    href: "https://socratic-software.github.io/stochastica/Chap_1.html"
+  }
 ];
 
 const goodthings_tbody = document.getElementById("goodthings-tbody");
