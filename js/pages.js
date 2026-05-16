@@ -13,9 +13,9 @@ const pages = [
   },
   {
     create_date: "2026-4-11",
-    update_date: "2026-4-11",
-    title: "快速制作一个单片机能用的.clangd",
-    href: "2026/quick_clangd/index.html",
+    update_date: "2026-5-13",
+    title: "mcu工程模板",
+    href: "2026/mcu_template/index.html",
   },
   {
     create_date: "2025-12-17",

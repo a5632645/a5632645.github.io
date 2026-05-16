@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>fix me</title>
+
+    <link rel="stylesheet" href="../../main.css">
+    <!-- code -->
+    <link rel="stylesheet" href="../../highlight.css">
+    <script type="text/javascript" src="../../highlight.js"></script>
+    <script>hljs.highlightAll();</script>
+    <!-- math -->
+    <script type="text/javascript" src="../../latex.js"></script>
+</head>
+<body>
+    <div>
+        <button onclick="window.location.href='../../index.html'">back</button>
+        <b>mcu工程模板</b>
+        <hr>
+    </div>
+    <section>
+        <h3 class="section-title">.clangd</h3>
+        <div class="section_content">
+            <p>-m32让指针变成32位</p>
+                <pre>
+CompileFlags:
+  Add:
+  - '-m32'
+  - '-Wall'
+  - '-Wextra'
+  - '-Wuninitialized'
+  - '-Wsometimes-uninitialized'
+  - '-Wconversion'
+  - '-Wfloat-conversion'
+  - '-Wsign-conversion'
+  - '-ferror-limit=0'
+  - '-Werror=microsoft-enum-forward-reference'
+  - '-Werror=implicit-enum-enum-cast'
+  - '-I包含路径'
+  - '-D宏=值'
+  - '-isystem', '路径'
+
+  # 让clangd用arm gcc而不是clang-msvc
+    Compiler: arm-none-eabi-gcc
+Diagnostics:
+  Suppress:
+  # - unused-includes
+  # - unknown_typename
+  - unknown_typename_suggest
+  - typename_requires_specqual
+
+            </pre>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">cmake复制粘贴</h3>
+        <div class="section_content">
+            <pre>
+                <code>
+cmake_minimum_required(VERSION 3.11)
+
+# ----------------------------------------
+# complier
+# ----------------------------------------
+
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_EXECUTABLE_SUFFIX ".elf")
+set(CMAKE_SYSTEM_VERSION 1)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+set(CMAKE_C_COMPILER arm-none-eabi-gcc)
+set(CMAKE_CXX_COMPILER arm-none-eabi-gcc)
+set(CMAKE_ASM_COMPILER  arm-none-eabi-gcc)
+set(CMAKE_AR arm-none-eabi-ar)
+set(CMAKE_OBJCOPY arm-none-eabi-objcopy)
+set(CMAKE_OBJDUMP arm-none-eabi-objdump)
+set(SIZE arm-none-eabi-size)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+project(stm32_test C ASM)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_C_STANDARD 11)
+
+# ----------------------------------------
+# arm m4
+# ----------------------------------------
+add_compile_definitions(ARM_MATH_CM4;ARM_MATH_MATRIX_CHECK;ARM_MATH_ROUNDING)
+add_compile_options(-mfloat-abi=hard -mfpu=fpv4-sp-d16)
+add_link_options(-mfloat-abi=hard -mfpu=fpv4-sp-d16)
+
+add_compile_options(-mcpu=cortex-m4 -mthumb)
+add_compile_options(
+    -ffunction-sections
+    -fdata-sections
+    -fno-common
+    -Wall
+    -fno-exceptions
+    -Wextra
+)
+
+# Enable assembler files preprocessing
+add_compile_options($<$<COMPILE_LANGUAGE:ASM>:-x$<SEMICOLON>assembler-with-cpp>)
+set(CMAKE_BUILD_TYPE "Debug")
+
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
+    message(STATUS "Maximum optimization for speed")
+    add_compile_options(-Ofast)
+elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo")
+    message(STATUS "Maximum optimization for speed, debug info included")
+    add_compile_options(-Ofast -g)
+elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "MinSizeRel")
+    message(STATUS "Maximum optimization for size")
+    add_compile_options(-Os)
+else ()
+    message(STATUS "Minimal optimization, debug info included")
+    add_compile_options(-Og -g)
+endif ()
+
+# ----------------------------------------
+# code
+# ----------------------------------------
+
+file(GLOB HAL_SRC "hal/Src/*.c")
+add_executable(stm32_test.elf
+    ${HAL_SRC}
+    src/main.c
+    src/startup_stm32f429xx.s
+    src/stm32f4xx_it.c
+    src/syscalls.c
+    src/sysmem.c
+    src/system_stm32f4xx.c
+)
+
+target_include_directories(stm32_test.elf
+PUBLIC
+    CMSIS/Core/Include
+    CMSIS/Device/ST/STM32F4xx/Include
+    hal/Inc
+    src
+)
+
+target_compile_definitions(stm32_test.elf
+PUBLIC
+    STM32F429xx=1
+    USE_FULL_ASSERT=1
+)
+
+target_link_options(stm32_test.elf
+PUBLIC
+    -Wl,-gc-sections,--print-memory-usage,-Map=${PROJECT_BINARY_DIR}/${PROJECT_NAME}.map
+    -mcpu=cortex-m4
+    -mthumb
+    -T "${CMAKE_CURRENT_SOURCE_DIR}/src/ld.ld"
+)
+
+# ----------------------------------------
+# elf to bin
+# ----------------------------------------
+add_custom_command(TARGET stm32_test.elf POST_BUILD
+        COMMAND ${CMAKE_OBJCOPY} -Oihex $<TARGET_FILE:stm32_test.elf> stm32_test.hex
+        COMMAND ${CMAKE_OBJCOPY} -Obinary $<TARGET_FILE:stm32_test.elf> stm32_test.bin
+        COMMENT "Building ${HEX_FILE}
+Building ${BIN_FILE}"
+)
+                </code>
+            </pre>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">vscode调试器</h3>
+        <p>不喜欢调试器下载固件，所以是附加模式</p>
+        <div class="section_content">
+            <pre>
+                <code>
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Cortex Debug",
+            "cwd": "${workspaceFolder}",
+            "executable": "./build/Debug/stm32_test.elf",
+            "request": "attach",
+            "type": "cortex-debug",
+            "runToEntryPoint": "main",
+            "servertype": "openocd",
+            "configFiles": ["${workspaceFolder}/openocd.cfg"],
+        }
+    ]
+}
+                </code>
+            </pre>
+            <p>GDB领域大神直连OPENOCD服务器</p>
+            <pre>
+                <code>
+{
+    "name": "(gdb) Test",
+    "type": "cppdbg",
+    "request": "launch",
+    "program": "${workspaceFolder}/build/Debug/stm32_test.elf",
+    "args": [],
+    "stopAtEntry": false,
+    "stopAtConnect": true,
+    "cwd": "${workspaceFolder}",
+    "environment": [],
+    "externalConsole": false,
+    "MIMode": "gdb",
+    "miDebuggerPath": "arm-none-eabi-gdb",
+    "miDebuggerServerAddress": "localhost:3333",
+    "setupCommands": [
+        {
+            "description": "为 gdb 启用整齐打印",
+            "text": "-enable-pretty-printing",
+            "ignoreFailures": true
+        },
+        {
+            "description": "将反汇编风格设置为 Intel",
+            "text": "-gdb-set disassembly-flavor intel",
+            "ignoreFailures": true
+        }
+    ],
+}
+                </code>
+            </pre>
+            <p>openocd 文件</p>
+            <pre>
+                <code>
+# 选择调试器接口: CMSIS-DAP
+source [find interface/cmsis-dap.cfg]
+
+# 选择传输协议: SWD (DAP 通常支持 JTAG 和 SWD，STM32 常用 SWD)
+transport select swd
+
+# 选择目标芯片: STM32F4 系列
+source [find target/stm32f4x.cfg]
+
+# 选填：设置下载速率 (单位 kHz)
+# 如果线缆较长或信号不稳定，可以降低这个数值
+adapter speed 2000
+
+# 选填：复位配置
+# srst_only 表示只有系统复位，connect_assert_srst 表示连接时拉低复位引脚
+# 对于很多便宜的 DAP 调试器，如果不接 RST 引脚，可以注释掉这行
+# reset_config srst_only
+                </code>
+            </pre>
+        </div>
+    </section>
+
+    <script src="../../main.js"></script>
+</body>
+</html>
