@@ -72,10 +72,10 @@ const pages = [
     href: "2025/dsp/dsp.html",
   },
   {
-    create_date: "2025-6-1",
-    update_date: "2025-6-1",
-    title: "windows技巧",
-    href: "2025/windows/windows.html",
+    create_date: "2026-6-8",
+    update_date: "2026-6-8",
+    title: "小技巧",
+    href: "2026/tricks/index.html",
   },
   {
     create_date: "2025-6-1",
