@@ -26,6 +26,10 @@ const goodthings = [
   {
     title: "随机信号处理学习入门",
     href: "https://socratic-software.github.io/stochastica/Chap_1.html"
+  },
+  {
+    title: "cytomic DSP文章",
+    href: "https://cytomic.com/technical-papers/"
   }
 ];
 

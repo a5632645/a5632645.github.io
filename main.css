@@ -11,7 +11,6 @@ body {
     background-color: #c0c0c0;
     margin: 8px;
     padding: 0;
-    font-family: "MS Sans Serif", "Microsoft Sans Serif", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     font-size: 13px;
     color: #000000;
 }
@@ -60,7 +59,6 @@ body {
     outline: 1px solid #000000;
     border: 2px outset #ffffff;
     padding: 2px 6px;
-    font-family: inherit;
     font-size: 13px;
     cursor: pointer;
 }
@@ -128,7 +126,7 @@ section {
     font-size: 13px;
     font-weight: bold;
     color: #ffffff;
-    background-color: #000080;
+    background-color: #404141;
 
     /* 3D sunken border inside the title bar */
     border: 1px solid #808080;
@@ -201,7 +199,6 @@ button {
     border-color: #FFFFFF #808080 #808080 #FFFFFF;
     padding: 2px 12px;
     margin: 2px 0px;
-    font-family: inherit;
     font-size: 13px;
     cursor: pointer;
 }
@@ -300,10 +297,6 @@ hr {
 /* ============================================
    Headings (outside sections, e.g. index page)
    ============================================ */
-h1, h2, h3, h4 {
-    font-family: inherit;
-}
-
 h1 {
     font-size: 18px;
     font-weight: bold;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSP</title>
+    <title>DSP collection</title>
 
     <link rel="stylesheet" href="../../main.css">
     <!-- code -->
@@ -16,63 +16,72 @@
 <body>
     <div>
         <button onclick="window.location.href='../../index.html'">back</button>
-        <b>DSP</b>
+        <b>DSP collection</b>
         <hr>
-
     </div>
 
-    <h3>定点滤波器</h3>
-    <div>
-        <a href="./q15_biquad.h">q15_biquad.h</a>
-        <a href="./q15_biquad.c">q15_biquad.c</a><br>
-        <a href="./q30_biquad.h">q30_biquad.h</a>
-        <a href="./q30_biquad.c">q30_biquad.c</a><br>
-    </div>
+    <section>
+        <h3 class="section-title">定点滤波器</h3>
+        <div class="section_content">
+            <a href="./q15_biquad.h">q15_biquad.h</a>
+            <a href="./q15_biquad.c">q15_biquad.c</a><br>
+            <a href="./q30_biquad.h">q30_biquad.h</a>
+            <a href="./q30_biquad.c">q30_biquad.c</a><br>
+        </div>
+    </section>
 
-    <h3 class="no_warp">梯形积分SVF</h3>
-    <a href="https://cytomic.com/files/dsp/SkfLinearTrapOptimised2.pdf">reference</a><br>
-    <div>
-        <a href="./svf.hpp">svf.c</a>
-    </div>
+    <section>
+        <h3 class="section-title">梯形积分SVF</h3>
+        <div class="section_content">
+            <a href="https://cytomic.com/files/dsp/SkfLinearTrapOptimised2.pdf">reference</a><br>
+            <a href="./svf.hpp">svf.c</a>
+        </div>
+    </section>
 
-    <h3>三次插值</h3>
-    <div>
-        <pre>
-<code>
+    <section>
+        <h3 class="section-title">三次插值</h3>
+        <div class="section_content">
+            <pre>
+                <code>
 float a = -p0 / 2.0f + 3.0f * p1 / 2.0f - 3.0f * p2 / 2.0f + p3 / 2.0f;
 float b = p0 - 5.0f * p1 / 2.0f + 2.0f * p2 - p3 / 2.0f;
 float c = -p0 / 2.0f + p2 / 2.0f;
 float d = p1;
 float v = a * t * t * t + b * t * t + c * t + d;
-</code>
-        </pre>
-    </div>
+                </code>
+            </pre>
+        </div>
+    </section>
 
-    <h3>极好的正交振荡器</h3>
-    <div>
-        <p>set</p>
-        <pre>
-<code>
+    <section>
+        <h3 class="section-title">极好的正交振荡器</h3>
+        <div class="section_content">
+            <p>set</p>
+            <pre>
+                <code>
 auto theta = freq / sampleRate_ * std::numbers::pi_v<float> * 2.0f;
 k1_ = std::tan(theta / 2.0f);
 k2_ = 2 * k1_ / (1 + k1_ * k1_);
-</code>
-        </pre>
-        <p>tick</p>
-        <pre>
-<code>
+                </code>
+            </pre>
+            <p>tick</p>
+            <pre>
+                <code>
 auto w = quadOscU_ - k1_ * quadOscV_;
 quadOscV_ = quadOscV_ + k2_ * w;
 quadOscU_ = w - k1_ * quadOscV_;
-</code>
-        </pre>
-    </div>
+                </code>
+            </pre>
+        </div>
+    </section>
 
-    <h3>CombAllpass</h3>
-    <button class="hideable-btn" id="comballpass"></button>
-    <div class="invisable" id="comballpass-div">
-        <pre>
-<code>
+    <section>
+        <h3 class="section-title">CombAllpass</h3>
+        <div class="section_content">
+            <button class="hideable-btn" id="comballpass"></button>
+            <div class="invisable" id="comballpass-div">
+                <pre>
+                    <code>
 class CombAllpass {
 public:
     void  Init(float sampleRate);
@@ -107,10 +116,10 @@ private:
     float alpha_{};
     float latch_{};
 };
-</code>
-        </pre>
-        <pre>
-<code>
+                    </code>
+                </pre>
+                <pre>
+                    <code>
 void CombAllpass::Init(float sampleRate) {
     delay_.Init(sampleRate);
 }
@@ -134,29 +143,32 @@ void CombAllpass::SetDelay(float delay) {
 void CombAllpass::SetAlpha(float a) {
     alpha_ = a;
 }
-</code>
-        </pre>
-    </div>
+                    </code>
+                </pre>
+            </div>
+        </div>
+    </section>
 
-    <h3>Lattice Feedback</h3>
-    <div>
-        <p>基本是nested的全通滤波器而非级联全通滤波器</p>
-        <a href="./lattice.ens">reaktor file</a>
-        <a href="https://www.bilibili.com/video/BV1v13Ez9EAM">sound</a>
-    </div>
-
-    <h3 class="no_warp">归一化带通滤波器的峰值</h3>
-    <a href="https://forum.juce.com/t/bandpass-filter-with-boosting-resonance/41917/4">引用</a>
-    <div>
-        <p>加上 1/Q 的增益即可</p>
-    </div>
-
-    <hr>
-    <h3>网页</h3>
-    <a href="https://cytomic.com/technical-papers/">https://cytomic.com/technical-papers/</a>
-
-    <script src="../../main.js"></script>
     <section>
+        <h3 class="section-title">Lattice Feedback</h3>
+        <div class="section_content">
+            <p>基本是nested的全通滤波器而非级联全通滤波器</p>
+            <a href="./lattice.ens">reaktor file</a>
+            <a href="https://www.bilibili.com/video/BV1v13Ez9EAM">sound</a>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">归一化带通滤波器的峰值</h3>
+        <div class="section_content">
+            <a href="https://forum.juce.com/t/bandpass-filter-with-boosting-resonance/41917/4">引用</a>
+            <p>加上 1/Q 的增益即可</p>
+        </div>
+    </section>
+    
+    <script src="../../main.js"></script>
+
+    <!-- <section>
         <h3 class="section-title">评论</h3>
         <div class="section_content">
             <script src="https://utteranc.es/client.js"
@@ -167,6 +179,6 @@ void CombAllpass::SetAlpha(float a) {
                 async>
             </script>
         </div>
-    </section>
+    </section> -->
 </body>
 </html>

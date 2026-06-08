@@ -66,10 +66,10 @@ const pages = [
     href: "2025/mcu/mcu.html",
   },
   {
-    create_date: "2025-7-1",
-    update_date: "2025-7-1",
-    title: "Legacy DSP",
-    href: "2025/dsp/dsp.html",
+    create_date: "2026-6-8",
+    update_date: "2026-6-8",
+    title: "DSP collection",
+    href: "2026/dsp/index.html",
   },
   {
     create_date: "2026-6-8",
