@@ -20,6 +20,78 @@
         <hr>
     </div>
 
+    <section data-update="2026-6-25">
+        <h3 class="section-title">超采样器</h3>
+        <div class="section_content">
+            <p>多相滤波器上采样下采样效率高高，支持任意整数倍。音频开发里有什么用到上下采样了呢，失真，那失真是用多相滤波器做么？</p>
+            <p>用到了，但不完全是。</p>
+            <hr>
+
+            <p>让我们看看实际工程都在怎么做</p>
+            <p><a href="https://github.com/ZL-Audio/ZLCompressor/tree/main/source/dsp/over_sample">https://github.com/ZL-Audio/ZLCompressor/tree/main/source/dsp/over_sample</a></p>
+            <p>我们看到一个滤波器系数就能支持任意2^N的超采样系数，多相滤波器里不是这样的，你应该每次设计pi/M的滤波器系数才对。</p>
+            <p>那么大佬这个是咋工作的呢。</p>
+            <hr>
+
+            <p>可以看到超采样是由好几个2X超采样的滤波器叠起来了，这也就意味着只能使用2^N的超采样系数。</p>
+            <p>难怪平常的插件里超采样系数都是2x 4x 8x这种形式，原来大家都在这么做。</p>
+            <p>剩下的就是一些优化小技巧，比如使用半带FIR滤波器，截止频率在pi/2，且长度为奇数。这使得从中心开始，往两边+2 -2，例如+2 +4 +6 +8 -2 -4 -6 -8的位置都非常接近0.</p>
+            <p>实际上，我们可以直接把这些位置设为0，损失了一点精确的幅度响应，但这可以让我们使用牛逼的优化技巧：这些零不需要计算。</p>
+            <p>配合上多相分解的技巧，even位算half_len个数据，odd位就只需要计算一个数据，就是中心位置。</p>
+            <hr>
+
+            <p>跟随大佬的思路，我也写了个简单的超采样器，没有进行半带滤波器特有的优化。</p>
+            <p><a href="https://github.com/a5632645/qwqdsp/blob/main/include/qwqdsp/fx/oversample.hpp">https://github.com/a5632645/qwqdsp/blob/main/include/qwqdsp/fx/oversample.hpp</a></p>
+            <p>以及对应的失真测试，测下来超采样/ADAA都无法完美消除高频（使用tanh函数），代数失真则能消除的非常干净。</p>
+            <p><a href="https://github.com/a5632645/qwqdsp/blob/main/tests/nogui/audiofx/oversample.cpp">https://github.com/a5632645/qwqdsp/blob/main/tests/nogui/audiofx/oversample.cpp</a></p>
+        </div>
+    </section>
+
+    <section data-update="2026-6-25">
+        <h3 class="section-title">FFT的时域混叠</h3>
+        <div class="section_content">
+            <p>看这个</p>
+            <p><a href="https://ccrma.stanford.edu/~jos/sasp/Portnoff_Windows.html">https://ccrma.stanford.edu/~jos/sasp/Portnoff_Windows.html</a></p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">多相下采样滤波器分析组</h3>
+        <div class="section_content">
+            <p>正在学习重建</p>
+        </div>
+    </section>
+
+    <section data-update="2026-6-25">
+        <h3 class="section-title">多相FIR滤波器</h3>
+        <div class="section_content">
+            <a target="_blank" href="https://github.com/ManasWolrd/qwqdsp/blob/main/tests/resample/resample.cpp">https://github.com/ManasWolrd/qwqdsp/blob/main/tests/resample/resample.cpp</a>
+            <hr>
+        </div>
+        <div class="section_content">
+            <b>下采样</b>
+            <p>假设我们要下采样M倍</p>
+            <p>首先整一个原型低通滤波器, 截止频率是 pi/M, 记作h(n), 其中n∈[0,L)</p>
+            <p>设n=aM+b, 分解为M个子滤波器, 显然第b个子滤波器的第a个系数 = aM+b个系数</p>
+            <p>现在来了M个采样输入, 显然运行到第i个采样时, 要更新第 i%M 个子滤波器</p>
+            <p>我去, 那不就是有一个分流器在运行, 每进来一个采样转一下送到那个滤波器</p>
+            <b>......</b>
+            <p>有意思的是，实际实现的时候你会发现x_vec的时间顺序是 (-R,0]</p>
+            <p>这个时候x[0]反而对应的是最后一个子滤波器分支</p>
+            <p>所以实现的时候要么反转输入x_vec，要么反转子滤波器顺序</p>
+            <hr>
+        </div>
+        <div class="section_content">
+            <b>上采样</b>
+            <p>这个超好理解，因为上采样可以分解成两个过程</p>
+            <p>1. 在低速率的每个采样后面插M-1个0</p>
+            <p>2. 在高速率运行抗混叠滤波器</p>
+            <p>立刻就能发现的是每来一个低速率采样，我们就能输出M个高速率采样，并且其中有M-1个位置均为0</p>
+            <p>设n=aM+b，分解为M个子滤波器</p>
+            <p>立刻就能发现每来一个采样，第i个高速率采样正在使用aM+i的系数，其中a属于[0, 子滤波器长度)</p>
+        </div>
+    </section>
+
     <section>
         <h3 class="section-title">定点滤波器</h3>
         <div class="section_content">

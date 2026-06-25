@@ -67,7 +67,7 @@ const pages = [
   },
   {
     create_date: "2026-6-8",
-    update_date: "2026-6-8",
+    update_date: "2026-6-25",
     title: "DSP collection",
     href: "2026/dsp/index.html",
   },
