@@ -34,6 +34,170 @@
         <hr>
     </div>
 
+    <section data-update="2026-7-13">
+        <h3 class="section-title">绘制波形</h3>
+        <div class="section_content">
+            <p>给<a href="https://github.com/SimZhou/vscode-audiolens">audiolen</a>提pull的时候学会的，在之前我从未写过绘制波形的代码</p>
+            <p>因垂丝汀，我们需要使用一种叫 min-max下采样法 的算法来提取每个像素所包含的音频区域里的最小最大值</p>
+            <p>然后，我们将从最大值开始绘制上包络，然后到末尾反向使用最小值绘制下包络，最后闭合多边形再描边就绘制完成了</p>
+            <p class="frame">
+                <b>波形绘制策略：多边形填充 + 描边兜底</b>（一次路径构建，两次绘制）<br><br>
+                传统方式对每列画 min→max 垂直线段（stroke），在方波/低频信号上有两个经典问题：<br>
+                1. 平顶处 min≈max，零长度线段被 Canvas 忽略，波形暗淡甚至不绘制<br>
+                2. 跳变边可能落在像素夹缝中，垂直线过细甚至消失<br><br>
+                本方案改用「闭合多边形填充」：<br>
+                1. moveTo 到第一列的 max 点<br>
+                2. 从左到右 lineTo 连接所有列的 max 点 → 上包络<br>
+                3. 从右到左 lineTo 连接所有列的 min 点 → 下包络（反向行走以闭合回路）<br>
+                4. closePath + fill() 填充整个波形区域<br>
+                5. 复用同一路径再 stroke 一次，兜底零面积多边形（min≈max 时 fill 不可见）<br><br>
+                这样无论方波、正弦波、噪声，在任何缩放级别下都呈现为连续实心波形。
+            </p>
+        </div>
+        <div class="section_content">
+            <div class="chirp-container" style="display: flex; flex-direction: column; gap: 8px;">
+                <div
+                    style="border: 1px solid #808080; box-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #FFFFFF; background-color: #1e1e1e; padding: 4px;">
+                    <canvas id="chirp-canvas" width="800" height="200"
+                        style="display: block; width: 100%; height: 200px;"></canvas>
+                </div>
+                <div
+                    style="display: flex; align-items: center; gap: 12px; font-size: 13px; color: #000000; padding: 4px 0;">
+                    <span style="white-space: nowrap; min-width: 45px;">10 ms</span>
+                    <input type="range" id="chirp-zoom" min="10" max="1000" value="1000" step="1" style="flex: 1;">
+                    <span style="white-space: nowrap; min-width: 55px;">1000 ms</span>
+                    <span id="chirp-info" style="margin-left: auto; white-space: nowrap; font-weight: bold;">窗口: 1000 ms</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; color: #000000; padding: 4px 0;">
+                    <span style="white-space: nowrap; min-width: 45px;">0 ms</span>
+                    <input type="range" id="chirp-center" min="0" max="1000" value="500" step="1" style="flex: 1;">
+                    <span style="white-space: nowrap; min-width: 55px;">1000 ms</span>
+                    <span id="chirp-center-info" style="margin-left: auto; white-space: nowrap; font-weight: bold;">中心: 500 ms</span>
+                </div>
+            </div>
+            <!-- chirp 波形 demo -->
+            <script>
+                (function () {
+                    const SAMPLE_RATE = 48000;
+                    const DURATION = 1.0;
+                    const F0 = 20;
+                    const F1 = 20000;
+
+                    // 生成 chirp 信号
+                    const numSamples = Math.floor(SAMPLE_RATE * DURATION);
+                    const chirp = new Float32Array(numSamples);
+                    for (let i = 0; i < numSamples; i++) {
+                        const t = i / SAMPLE_RATE;
+                        const phase = 2 * Math.PI * (F0 * t + (F1 - F0) * t * t / (2 * DURATION));
+                        chirp[i] = Math.sin(phase);
+                    }
+
+                    const canvas = document.getElementById('chirp-canvas');
+                    const ctx = canvas.getContext('2d');
+                    const slider = document.getElementById('chirp-zoom');
+                    const centerSlider = document.getElementById('chirp-center');
+                    const info = document.getElementById('chirp-info');
+                    const centerInfo = document.getElementById('chirp-center-info');
+
+                    function setupCanvas() {
+                        const rect = canvas.getBoundingClientRect();
+                        const dpr = window.devicePixelRatio || 1;
+                        const w = Math.round(rect.width * dpr);
+                        const h = Math.round(rect.height * dpr);
+                        if (canvas.width !== w || canvas.height !== h) {
+                            canvas.width = w;
+                            canvas.height = h;
+                        }
+                        return { w: rect.width, h: rect.height };
+                    }
+
+                    function draw() {
+                        const { w, h } = setupCanvas();
+                        const widthMs = parseFloat(slider.value);
+                        const centerMs = parseFloat(centerSlider.value);
+                        info.textContent = `窗口: ${widthMs} ms`;
+                        centerInfo.textContent = `中心: ${centerMs} ms`;
+
+                        const halfMs = widthMs / 2;
+                        const centerSec = centerMs / 1000;
+                        const tStart = Math.max(0, centerSec - halfMs / 1000);
+                        const tEnd = Math.min(DURATION, centerSec + halfMs / 1000);
+                        const actualWidth = tEnd - tStart;
+
+                        ctx.clearRect(0, 0, w, h);
+
+                        // 背景
+                        ctx.fillStyle = '#1e1e1e';
+                        ctx.fillRect(0, 0, w, h);
+
+                        // 网格线
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+                        ctx.lineWidth = 1;
+                        for (let i = 0; i <= 4; i++) {
+                            const y = (h / 4) * i;
+                            ctx.beginPath();
+                            ctx.setLineDash([2, 4]);
+                            ctx.moveTo(0, y);
+                            ctx.lineTo(w, y);
+                            ctx.stroke();
+                        }
+                        ctx.setLineDash([]);
+
+                        if (w === 0 || h === 0 || actualWidth <= 0) return;
+
+                        const centerY = h / 2;
+                        const scaleY = centerY * 0.9;
+
+                        // min-max 下采样
+                        const upperY = [];
+                        const lowerY = [];
+
+                        for (let px = 0; px < w; px++) {
+                            const pxStart = tStart + (actualWidth * px) / w;
+                            const pxEnd = tStart + (actualWidth * (px + 1)) / w;
+                            const sStart = Math.max(0, Math.floor(pxStart * SAMPLE_RATE));
+                            const sEnd = Math.min(numSamples, Math.ceil(pxEnd * SAMPLE_RATE));
+
+                            let minVal = Infinity;
+                            let maxVal = -Infinity;
+                            for (let s = sStart; s < sEnd; s++) {
+                                const v = chirp[s];
+                                if (v < minVal) minVal = v;
+                                if (v > maxVal) maxVal = v;
+                            }
+
+                            upperY.push(centerY - maxVal * scaleY);
+                            lowerY.push(centerY - minVal * scaleY);
+                        }
+
+                        ctx.strokeStyle = 'rgb(0, 200, 255)';
+                        ctx.lineWidth = 1;
+                        ctx.fillStyle = 'rgba(0, 200, 255, 0.3)';
+
+                        // 填充多边形（中线 → 上包络 → 中线 → 下包络）
+                        ctx.beginPath();
+                        ctx.moveTo(0, upperY[0]);
+                        for (let px = 0; px < w; px++) {
+                            ctx.lineTo(px, upperY[px]);
+                        }
+                        for (let px = w - 1; px >= 0; px--) {
+                            ctx.lineTo(px, lowerY[px]);
+                        }
+                        ctx.closePath();
+                        ctx.fill();
+                        // 复用路径再 stroke 一次，兜底零面积多边形（min≈max 时 fill 不可见）
+                        ctx.stroke();
+                    }
+
+                    slider.addEventListener('input', draw);
+                    centerSlider.addEventListener('input', draw);
+                    window.addEventListener('resize', draw);
+                    setTimeout(draw, 0);
+                })();
+            </script>
+        </div>
+    </section>
+
     <section data-update="2026-6-25">
         <h3 class="section-title">review遮盖法求并行滤波器</h3>
         <div class="section_content">
