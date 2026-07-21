@@ -1,141 +1,130 @@
-const pages = [
+const dspPages = [
   {
-    create_date: "2026-5-4",
-    update_date: "2026-5-5",
-    title: "玩 rtthread titan mini",
-    href: "2026/titan_mini/index.html"
-  },
-  {
-    create_date: "2026-4-25",
-    update_date: "2026-4-25",
-    title: "IIR滤波器的线性相位补偿",
-    href: "2026/reverse_iir/index.html",
-  },
-  {
-    create_date: "2026-4-11",
-    update_date: "2026-5-13",
-    title: "mcu工程模板",
-    href: "2026/mcu_template/index.html",
-  },
-  {
-    create_date: "2025-12-17",
-    update_date: "2026-1-10",
-    title: "usb学习记录",
-    href: "2025/usb/index.html",
-  },
-  {
-    create_date: "2025-12-07",
-    update_date: "2025-12-15",
-    title: "gd32h757hzmt6 IPA调教",
-    href: "2025/gd32_ipa/index.html",
-  },
-  {
-    create_date: "2025-11-1",
-    update_date: "2025-11-1",
-    title: "zed cmake 任务脚本",
-    href: "2025/zed_cmake_script/index.html",
-  },
-  {
-    create_date: "2025-11-1",
-    update_date: "2025-11-1",
-    title: "另一种频率响应计算",
-    href: "2025/another_frequency_responce/another_filter_responce.html",
-  },
-  {
-    create_date: "2025-11-1",
-    update_date: "2025-12-28",
-    title: "TPT滤波器设计总结",
-    href: "2025/tpt-filter/index.html",
-  },
-  {
-    create_date: "2025-8-1",
-    update_date: "2025-12-11",
-    title: "滤波器设计学习",
-    href: "2025/filter-design/main.html",
-  },
-  {
-    create_date: "2025-7-1",
-    update_date: "2025-7-1",
-    title: "制作一个usb-midi转换器",
-    href: "2025/usb-midi/main.html",
-  },
-  {
-    create_date: "2025-7-1",
-    update_date: "2025-7-1",
-    title: "单片机",
-    href: "2025/mcu/mcu.html",
-  },
-  {
-    create_date: "2026-6-8",
     update_date: "2026-7-13",
     title: "DSP collection",
-    href: "2026/dsp/index.html",
+    href: "dsp/dsp/index.html",
   },
   {
-    create_date: "2026-6-8",
-    update_date: "2026-6-8",
-    title: "小技巧",
-    href: "2026/tricks/index.html",
+    update_date: "2025-12-11",
+    title: "滤波器设计学习",
+    href: "dsp/filter-design/main.html",
+    img: "dsp/filter-design/pzmap-analog-cheb2.png"
   },
   {
-    create_date: "2025-6-1",
+    update_date: "2025-12-28",
+    title: "TPT滤波器设计总结",
+    href: "dsp/tpt-filter/index.html",
+    img: "dsp/tpt-filter/1pole.png"
+  },
+  {
+    update_date: "2025-11-1",
+    title: "另一种频率响应计算",
+    href: "dsp/another_frequency_responce/another_filter_responce.html",
+    img: "dsp/another_frequency_responce/match_biquad_calc.png",
+  },
+  {
+    update_date: "2026-4-25",
+    title: "IIR滤波器的线性相位补偿",
+    href: "dsp/reverse_iir/index.html",
+  },
+  {
     update_date: "2025-6-1",
     title: "实时Burg线性预测",
-    href: "2025/burg/burg.html",
+    href: "dsp/burg/burg.html",
   },
 ];
 
-const pages_tbody = document.getElementById("pages-tbody");
+const mcuPages = [
+  {
+    update_date: "2026-5-5",
+    title: "玩 rtthread titan mini",
+    href: "mcu/titan_mini/index.html",
+    img: "mcu/titan_mini/program_gui.png"
+  },
+  {
+    update_date: "2026-5-13",
+    title: "mcu工程模板",
+    href: "mcu/mcu_template/index.html",
+  },
+  {
+    update_date: "2026-1-10",
+    title: "usb学习记录",
+    href: "mcu/usb/index.html",
+  },
+  {
+    update_date: "2025-12-15",
+    title: "gd32h757hzmt6 IPA调教",
+    href: "mcu/gd32_ipa/index.html",
+    img: "mcu/gd32_ipa/lvgl_file.png"
+  },
+  {
+    update_date: "2025-7-1",
+    title: "制作一个usb-midi转换器",
+    href: "mcu/usb-midi/main.html",
+    img: "mcu/usb-midi/midi-rx.png"
+  },
+  {
+    update_date: "2025-7-1",
+    title: "单片机",
+    href: "mcu/mcu/mcu.html",
+  },
+];
 
-for (const item of pages) {
-  const tr = document.createElement("tr");
+const othersPages = [
+  {
+    update_date: "2025-11-1",
+    title: "zed cmake 任务脚本",
+    href: "others/zed_cmake_script/index.html",
+    img: "others/zed_cmake_script/debug.png",
+  },
+  {
+    update_date: "2026-6-8",
+    title: "小技巧",
+    href: "others/tricks/index.html",
+    img: "others/tricks/vscode_bg.png"
+  },
+];
 
-  const td_create = document.createElement("td");
-  td_create.textContent = item.create_date;
-  tr.appendChild(td_create);
+function renderCards(containerId, items) {
+  const grid = document.getElementById(containerId);
+  for (const item of items) {
+    const card = document.createElement("a");
+    card.className = "dsp-card";
+    card.href = item.href;
 
-  const td_update = document.createElement("td");
-  td_update.textContent = item.update_date;
-  tr.appendChild(td_update);
+    const imgDiv = document.createElement("div");
+    imgDiv.className = "dsp-card-img";
+    if (item.img) {
+      const img = document.createElement("img");
+      img.src = item.img;
+      img.alt = item.title;
+      imgDiv.appendChild(img);
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "dsp-card-img-ph";
+      ph.textContent = "no img";
+      imgDiv.appendChild(ph);
+    }
+    card.appendChild(imgDiv);
 
-  const td_desc = document.createElement("td");
-  const a = document.createElement("a");
-  a.href = item.href;
-  a.textContent = item.title;
-  td_desc.appendChild(a);
-  tr.appendChild(td_desc);
+    const body = document.createElement("div");
+    body.className = "dsp-card-body";
 
-  const td_delta = document.createElement("td");
-  const date_arr = item.update_date.split("-");
-  const year = date_arr[0];
-  const month = date_arr[1];
-  const day = date_arr[2];
-  const date = new Date(year, month - 1, day);
-  const current_date = new Date();
-  const delta_date = Math.abs(current_date.getTime() - date.getTime());
-  const delta_days = Math.floor(delta_date / (1000 * 60 * 60 * 24));
-  td_delta.textContent = `${delta_days} days`;
-  if (delta_days < 30) {
-    td_delta.style.color = "green";
-  } else if (delta_days < 60) {
-    td_delta.style.color = "#806610";
-  } else if (delta_days < 90) {
-    td_delta.style.color = "grey";
-  } else {
-    td_delta.style.color = "black";
+    const name = document.createElement("div");
+    name.className = "dsp-card-name";
+    name.textContent = item.title;
+    body.appendChild(name);
+
+    const date = document.createElement("div");
+    date.className = "dsp-card-date";
+    date.textContent = item.update_date;
+    body.appendChild(date);
+
+    card.appendChild(body);
+    grid.appendChild(card);
   }
-  tr.appendChild(td_delta);
-
-  pages_tbody.appendChild(tr);
 }
 
-const rows = Array.from(pages_tbody.querySelectorAll("tr"));
-rows.sort((a, b) => {
-  const delta_a = parseInt(a.children[3].textContent);
-  const delta_b = parseInt(b.children[3].textContent);
-  return delta_a - delta_b;
-});
-pages_tbody.innerHTML = "";
-for (const row of rows) {
-  pages_tbody.appendChild(row);
-}
+renderCards("dsp-grid", dspPages);
+renderCards("mcu-grid", mcuPages);
+renderCards("others-grid", othersPages);

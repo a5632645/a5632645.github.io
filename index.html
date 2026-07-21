@@ -25,31 +25,33 @@
             bilibili
         </button>
 
-        <section>
-            <h3 class="section-title">pages</h3>
+        <div class="win-group">
+            <div class="win-group-title">DSP</div>
             <div class="section_content">
-                <table class="page_table" border="1">
-                    <thead>
-                        <tr>
-                            <th>Create Date</th>
-                            <th>Update Date</th>
-                            <th>Description</th>
-                            <th>Delta Days</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pages-tbody"></tbody>
-                </table>
+                <div class="dsp-card-grid" id="dsp-grid"></div>
             </div>
-        </section>
+        </div>
 
-        <section>
-            <h3 class="section-title">goodthings</h3>
+        <div class="win-group">
+            <div class="win-group-title">MCU</div>
             <div class="section_content">
-                <table border="1">
-                    <tbody id="goodthings-tbody"></tbody>
-                </table>
+                <div class="dsp-card-grid" id="mcu-grid"></div>
             </div>
-        </section>
+        </div>
+
+        <div class="win-group">
+            <div class="win-group-title">Others</div>
+            <div class="section_content">
+                <div class="dsp-card-grid" id="others-grid"></div>
+            </div>
+        </div>
+
+        <div class="win-group">
+            <div class="win-group-title">推荐链接 (Good Things)</div>
+            <div class="section_content">
+                <div class="dsp-card-grid" id="goodthings-grid"></div>
+            </div>
+        </div>
 
         <script src="js/pages.js"></script>
         <script src="js/goodthings.js"></script>

@@ -33,15 +33,21 @@ const goodthings = [
   }
 ];
 
-const goodthings_tbody = document.getElementById("goodthings-tbody");
+const goodthingsGrid = document.getElementById("goodthings-grid");
 for (const item of goodthings) {
-  const tr = document.createElement("tr");
-  const td = document.createElement("td");
-  const a = document.createElement("a");
-  a.href = item.href;
-  a.target = "_blank";
-  a.textContent = item.title;
-  td.appendChild(a);
-  tr.appendChild(td);
-  goodthings_tbody.appendChild(tr);
+  const card = document.createElement("a");
+  card.className = "dsp-card";
+  card.href = item.href;
+  card.target = "_blank";
+
+  const body = document.createElement("div");
+  body.className = "dsp-card-body";
+
+  const name = document.createElement("div");
+  name.className = "dsp-card-name";
+  name.textContent = item.title;
+  body.appendChild(name);
+
+  card.appendChild(body);
+  goodthingsGrid.appendChild(card);
 }

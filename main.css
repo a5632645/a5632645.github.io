@@ -308,3 +308,116 @@ h3 {
     font-weight: bold;
     color: #000000;
 }
+
+/* ============================================
+   Windows Group Box — Sunken 3D Border
+   ============================================ */
+.win-group {
+    border: 1px solid #808080;
+    box-shadow:
+        inset 1px 1px 0 #000000,
+        inset -1px -1px 0 #FFFFFF;
+    background-color: #c0c0c0;
+    padding: 16px 8px 8px 8px;
+    margin: 12px 0;
+    position: relative;
+}
+
+.win-group-title {
+    position: absolute;
+    top: -9px;
+    left: 8px;
+    padding: 0 4px;
+    background-color: #c0c0c0;
+    font-size: 12px;
+    font-weight: bold;
+    color: #000000;
+    user-select: none;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+}
+
+/* ============================================
+   DSP Card Grid — Classic Windows 3D Cards
+   ============================================ */
+.dsp-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px;
+}
+
+.dsp-card {
+    display: block;
+    border: 1px solid #808080;
+    box-shadow:
+        inset 1px 1px 0 #FFFFFF,
+        inset -1px -1px 0 #000000;
+    background-color: #c0c0c0;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.dsp-card:hover {
+    background-color: #d4d4d4;
+    border-color: #000080;
+}
+
+.dsp-card:active {
+    box-shadow:
+        inset 1px 1px 0 #000000,
+        inset -1px -1px 0 #FFFFFF;
+}
+
+.dsp-card-img {
+    height: 140px;
+    overflow: hidden;
+    border-bottom: 1px solid #808080;
+    background-color: #2a2a2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dsp-card-img-ph {
+    font-size: 13px;
+    font-style: italic;
+    color: #555;
+    user-select: none;
+}
+
+.dsp-card-body {
+    padding: 10px;
+}
+
+.dsp-card-name {
+    font-size: 15px;
+    font-weight: bold;
+    color: #000000;
+    margin-bottom: 2px;
+}
+
+.dsp-card:hover .dsp-card-name {
+    color: #000080;
+}
+
+.dsp-card-desc {
+    font-size: 12px;
+    color: #000000;
+    margin-top: 4px;
+    line-height: 1.5;
+}
+
+.dsp-card-date {
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+}
+
+.dsp-card-img img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
