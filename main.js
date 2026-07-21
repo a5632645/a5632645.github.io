@@ -29,7 +29,7 @@ for (let i = 0; i < flash_links.length; i++) {
 
 document.body.insertAdjacentHTML('beforeend', `
     <div class="catalog-button">
-        Catalog
+        <span class="catalog-label">Catalog</span>
         <div class="catalog-list"></div>
     </div>
 `);

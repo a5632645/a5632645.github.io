@@ -114,12 +114,24 @@ section {
 }
 
 /* ============================================
+   Page Header — Sticky top bar (back + title)
+   Stays above section-title when scrolling
+   ============================================ */
+.page-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background-color: #c0c0c0;
+    padding: 4px 0 0 0;
+}
+
+/* ============================================
    Section Title — Windows Title Bar Style
    Sticky, with classic gradient-like gray
    ============================================ */
 .section-title {
     position: sticky;
-    top: 0;
+    top: 36px;
 
     margin: 0;
     padding: 4px 8px;
@@ -236,12 +248,19 @@ button:active {
     cursor: default;
 }
 
+.catalog-label {
+    display: block;
+    padding: 4px 8px;
+    cursor: default;
+    user-select: none;
+}
+
 .catalog-list {
     display: none;
     flex-direction: column;
     width: fit-content;
     background-color: #c0c0c0;
-    padding: 4px 0;
+    padding: 10px 0 4px 0;
 }
 
 .catalog-list a {
