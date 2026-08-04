@@ -3,16 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>小技巧</title>
+    <title>windows & vscode</title>
 
     <link rel="stylesheet" href="../../main.css">
 </head>
 <body>
     <div class="page-header">
         <button onclick="window.location.href='../../index.html'">back</button>
-        <b>小技巧</b>
+        <b>windows & vscode</b>
         <hr>
     </div>
+
+    <section>
+        <h3 class="section-title">github copilot终端运行指令莫名其妙被判断为超时</h3>
+        <div class="section_content">
+            <p>shell集成失败，检查你的shell集成</p>
+            <a href="https://vscode.js.cn/docs/terminal/shell-integration">shell intergration</a>
+            <p>我用的是powershell，通过winget更新后就集成失败了，运行下面的命令后就好了</p>
+            <pre>
+if ((Get-ExecutionPolicy -Scope LocalMachine) -eq 'Undefined' -and (Get-ExecutionPolicy -Scope CurrentUser) -eq 'Undefined') {
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+}
+            </pre>
+            <p>或者增加轮询时间，这个会导致命令运行完成后还需要等一会才能检测到</p>
+            <p class="frame">"chat.tools.terminal.idlePollInterval": 5000,</p>
+        </div>
+    </section>
 
     <section>
         <h3 class="section-title">通过msstyle修改你的任务管理器颜色</h3>
@@ -37,5 +53,7 @@
             <img src="vscode_bg.png" alt="img" />
         </div>
     </section>
+
+    <script src="../../main.js"></script>
 </body>
 </html>

@@ -78,8 +78,8 @@ const othersPages = [
     img: "others/zed_cmake_script/debug.png",
   },
   {
-    update_date: "2026-6-8",
-    title: "小技巧",
+    update_date: "2026-8-4",
+    title: "windows & vscode",
     href: "others/tricks/index.html",
     img: "others/tricks/vscode_bg.png"
   },
@@ -87,7 +87,13 @@ const othersPages = [
 
 function renderCards(containerId, items) {
   const grid = document.getElementById(containerId);
-  for (const item of items) {
+  const sorted = [...items].sort((a, b) => {
+    const [ay, am, ad] = a.update_date.split("-").map(Number);
+    const [by, bm, bd] = b.update_date.split("-").map(Number);
+    return (by - ay) || (bm - am) || (bd - ad);
+  });
+
+  for (const item of sorted) {
     const card = document.createElement("a");
     card.className = "dsp-card";
     card.href = item.href;
