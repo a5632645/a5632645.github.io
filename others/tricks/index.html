@@ -25,6 +25,20 @@ if ((Get-ExecutionPolicy -Scope LocalMachine) -eq 'Undefined' -and (Get-Executio
     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 }
             </pre>
+            <hr>
+
+            <b>并没有好！</b>
+            <p>实际是因为该shell含有命令行参数，来自deepseek v4 flash修复结论</p>
+            <p>"args": ["-NoExit", "-Command", "chcp 65001 | Out-Null"]</p>
+            <div class="frame">
+                <p>settings.json 中的终端 profile PowerShell (UTF-8) 自定义了启动参数：</p>
+                <p>VS Code 的 getShellIntegrationInjection() 对 PowerShell 只会在以下情况注入集成脚本：</p>
+                <p>参数为空 / 未定义</p>
+                <p>单个 -NoLogo（隐含参数）</p>
+                <p>-l / -login（登录参数）</p>
+            </div>
+            <hr>
+            
             <p>或者增加轮询时间，这个会导致命令运行完成后还需要等一会才能检测到</p>
             <p class="frame">"chat.tools.terminal.idlePollInterval": 5000,</p>
         </div>

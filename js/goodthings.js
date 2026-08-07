@@ -30,6 +30,10 @@ const goodthings = [
   {
     title: "cytomic DSP文章",
     href: "https://cytomic.com/technical-papers/"
+  },
+  {
+    title: "hiirofox github",
+    href: "https://github.com/hiirofox"
   }
 ];
 
