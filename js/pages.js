@@ -131,6 +131,49 @@ function renderCards(containerId, items) {
   }
 }
 
-renderCards("dsp-grid", dspPages);
-renderCards("mcu-grid", mcuPages);
-renderCards("others-grid", othersPages);
+// 各组配置：页面数据 + 标题
+const groups = [
+  { id: "dsp-grid", title: "DSP", pages: dspPages },
+  { id: "mcu-grid", title: "MCU", pages: mcuPages },
+  { id: "others-grid", title: "Others", pages: othersPages },
+];
+
+// 取一组中最新更新的日期（数值化便于比较）
+function groupLatestDate(pages) {
+  return Math.max(...pages.map((p) => {
+    const [y, m, d] = p.update_date.split("-").map(Number);
+    return y * 10000 + m * 100 + d;
+  }));
+}
+
+// 按各组最新更新日期从新到旧创建 group；组内 page 排序由 renderCards 保持
+function renderGroups() {
+  const container = document.getElementById("groups-container");
+  const sorted = [...groups].sort(
+    (a, b) => groupLatestDate(b.pages) - groupLatestDate(a.pages)
+  );
+
+  for (const group of sorted) {
+    const win = document.createElement("div");
+    win.className = "win-group";
+
+    const title = document.createElement("div");
+    title.className = "win-group-title";
+    title.textContent = group.title;
+    win.appendChild(title);
+
+    const content = document.createElement("div");
+    content.className = "section_content";
+
+    const grid = document.createElement("div");
+    grid.className = "dsp-card-grid";
+    grid.id = group.id;
+    content.appendChild(grid);
+    win.appendChild(content);
+
+    container.appendChild(win);
+    renderCards(group.id, group.pages);
+  }
+}
+
+renderGroups();
