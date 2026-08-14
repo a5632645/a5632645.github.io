@@ -1,5 +1,11 @@
 const dspPages = [
   {
+    update_date: "2026-8-15",
+    title: "插件逆向还原: Prosoniq Morph",
+    href: "dsp/reverse/morph/index.html",
+    img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSSB62kBFI_Dd7Jf2_KG9LhXnzFncpGR5HqsSZ31cfXU1T3s_GlxKW2MW3a&s=10"
+  },
+  {
     update_date: "2026-7-13",
     title: "DSP collection",
     href: "dsp/dsp/index.html",

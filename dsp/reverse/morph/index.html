@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>插件逆向还原: Prosoniq Morph</title>
+
+    <link rel="stylesheet" href="../../../main.css">
+    <!-- code -->
+    <link rel="stylesheet" href="../../../highlight.css">
+    <script type="text/javascript" src="../../../highlight.js"></script>
+    <script>hljs.highlightAll();</script>
+    <!-- math -->
+    <script type="text/javascript" src="../../../latex.js"></script>
+
+    <style>
+        /* ============ 插件面板（Windows95 风格，与博客一致） ============ */
+        .plugin-panel {
+            background-color: #c0c0c0;
+        }
+
+        .pp-title {
+            font-size: 17px;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .pp-sub {
+            font-size: 12px;
+            color: #666666;
+            font-weight: normal;
+            margin-left: 8px;
+        }
+
+        .pp-body {
+            display: flex;
+            gap: 24px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .pp-col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .pp-label {
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .pp-slot {
+            width: 260px;
+            border: 1px solid #808080;
+            box-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #ffffff;
+            background-color: #252a31;
+            color: #e8edf2;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+
+        .pp-slot.drag {
+            outline: 2px dashed #4ea1ff;
+        }
+
+        .pp-slot-name {
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .pp-file {
+            color: #9aa8b5;
+            font-size: 12px;
+            font-weight: normal;
+            word-break: break-all;
+        }
+
+        .pp-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .pp-status {
+            color: #666666;
+            font-size: 12px;
+            margin-top: 12px;
+            max-width: 260px;
+        }
+
+        #pp-pad {
+            background-color: #171b20;
+            border: 1px solid #808080;
+            box-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #ffffff;
+            cursor: crosshair;
+            width: 360px;
+            height: 360px;
+            touch-action: none;
+        }
+
+        .pp-xytext {
+            color: #666666;
+            margin-top: 8px;
+            font-family: Consolas, monospace;
+            font-size: 12px;
+        }
+
+        .pp-controls {
+            flex-direction: row;
+            align-items: flex-end;
+            gap: 14px;
+        }
+
+        .pp-knob {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .pp-knob-val {
+            font-size: 12px;
+            color: #666666;
+            font-family: Consolas, monospace;
+        }
+
+        .pp-knob-name {
+            font-size: 12px;
+            color: #666666;
+        }
+
+        .pp-vslider {
+            writing-mode: vertical-lr;
+            direction: rtl;
+            height: 170px;
+            accent-color: #000060;
+        }
+
+        .pp-wide {
+            width: 80px;
+            margin-top: 8px;
+        }
+
+        /* Wide 开启/按下状态：与其他普通按钮按下时的样式一致（灰色 inset） */
+        .pp-wide.on {
+            background-color: #c0c0c0;
+            border: 2px inset #808080;
+            border-color: #808080 #FFFFFF #FFFFFF #808080;
+            color: #000000;
+        }
+
+        .pp-note {
+            color: #666666;
+            font-size: 12px;
+            margin-top: 10px;
+            max-width: 720px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="page-header">
+        <button onclick="window.location.href='../../../index.html'">back</button>
+        <b>插件逆向还原: Prosoniq Morph</b>
+        <hr>
+    </div>
+
+    <section>
+        <h3 class="section-title">交互式重现</h3>
+        <div class="section_content">
+            <p>
+                这是 Prosoniq Morph（2003，VST2）静态逆向结果的一个浏览器实时重现。加载两个 WAV 文件作为
+                A/B 源，拖动 XY 垫或滑杆时，参数会实时传到音频层（AudioWorklet，约一个处理帧内生效）。
+            </p>
+            <div class="frame plugin-panel">
+                <div class="pp-title">Morph DSP <span class="pp-sub">Static spectral reconstruction</span></div>
+                <div class="pp-body">
+                    <div class="pp-col pp-sources">
+                        <div class="pp-label">Sources</div>
+                        <div class="pp-slot" id="slot-a">
+                            <div class="pp-slot-name">A source</div>
+                            <div class="pp-file">No file loaded</div>
+                            <button class="pp-browse" data-slot="0" style="margin-top:8px;">Browse...</button>
+                        </div>
+                        <div class="pp-slot" id="slot-b">
+                            <div class="pp-slot-name">B source</div>
+                            <div class="pp-file">No file loaded</div>
+                            <button class="pp-browse" data-slot="1" style="margin-top:8px;">Browse...</button>
+                        </div>
+                        <div class="pp-buttons">
+                            <button id="btn-play">Play</button>
+                            <button id="btn-stop">Stop</button>
+                        </div>
+                        <div class="pp-status" id="pp-status">Open two WAV files as sources A and B</div>
+                    </div>
+                    <div class="pp-col">
+                        <div class="pp-label">Morph XY</div>
+                        <canvas id="pp-pad" width="360" height="360"></canvas>
+                        <div class="pp-xytext" id="pp-xytext">X 0.500&nbsp;&nbsp; Y 0.000</div>
+                    </div>
+                    <div class="pp-col pp-controls">
+                        <div class="pp-label">Controls</div>
+                        <div class="pp-knob">
+                            <div class="pp-knob-val" id="vol-val">1.00</div>
+                            <input type="range" class="pp-vslider" id="vol" min="0" max="2" step="0.01" value="1">
+                            <div class="pp-knob-name">Vol</div>
+                        </div>
+                        <div class="pp-knob">
+                            <div class="pp-knob-val" id="dw-val">0.25</div>
+                            <input type="range" class="pp-vslider" id="dw" min="0" max="1" step="0.01" value="0.25">
+                            <div class="pp-knob-name">Dry/Wet</div>
+                        </div>
+                        <div class="pp-knob">
+                            <div class="pp-knob-val" id="room-val">0.20</div>
+                            <input type="range" class="pp-vslider" id="room" min="0" max="1" step="0.01" value="0.2">
+                            <div class="pp-knob-name">Room</div>
+                        </div>
+                        <button id="btn-wide" class="pp-wide">Wide</button>
+                    </div>
+                </div>
+                <div class="pp-note">
+                    说明：A/B 均取文件第一声道；B 若采样率不同会自动重采样到 A 的采样率（默认 48 kHz）。
+                    两个源循环播放。本页使用 AudioWorklet，需要 http/https 环境（本地起一个静态服务器即可），
+                    直接以 file:// 打开时音频可能无法初始化。
+                </div>
+                <input type="file" id="file-input" accept="audio/*,.wav" class="invisable">
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">逆向背景</h3>
+        <div class="section_content">
+            <p>
+                <code>morph.dll</code> 是一个 PE32 VST2 二进制（基址 <code>0x10000000</code>，构建于 2003-10-03），
+                唯一导出是 <code>main</code>（位于 <code>0x1000aab0</code>）。其许可证检查（<code>0x1000d230</code>）
+                会阻止测量宿主获得有效的处理信号，因此该结果仅基于静态分析，未绕过该检查。
+            </p>
+            <p>
+                处理包装例程 <code>0x1000db40</code> 以 1024 采样为 hop 处理两个独立输入源（输入左/右声道），
+                变换路径使用 2048 点复 FFT（<code>0x1000f4b0</code> / <code>0x10011350</code> 为正/逆变换）。
+                逆变换结果是复数时间块，默认模式将其组合为：
+            </p>
+            <p>
+                \[
+                L = \text{real} - 0.25 \cdot \text{imag}, \qquad R = \text{imag} - 0.25 \cdot \text{real}
+                \]
+            </p>
+            <p>
+                中心频谱例程是 <code>0x1000ee20</code>。对每个正频率 bin 计算 A、B 的幅度与 <code>atan2</code>
+                相位，并生成平滑包络：
+            </p>
+            <ol>
+                <li>把幅度谱放到 pi 相位斜坡上；</li>
+                <li>逆变换并保留实部；</li>
+                <li>保留长度 \( \mathrm{clamp}(N \cdot x^3,\, 2,\, N) \) 的中心段；</li>
+                <li>施加 \( 0.42 - 0.5\cos + 0.08\cos(2\cdot) \)（Blackman 窗）；</li>
+                <li>正变换并取两倍幅度。</li>
+            </ol>
+            <p>
+                x87 指令流中包含十一处对 \(x\) 和 \(1-x\) 的重复乘方。令 \(e_a, e_b\) 为包络，
+                \( r_a = |A|/e_a \)、\( r_b = |B|/e_b \)（各自上限 1000），恢复出的复 bin 公式为：
+            </p>
+            <p>
+                \[
+                a_{11} = x^{11}, \qquad b_{11} = (1-x)^{11}
+                \]
+                \[
+                \text{cross} = (1-y)\, r_a e_b\, e^{i\phi_A} + y\, r_b e_a\, e^{i\phi_B}
+                \]
+                \[
+                \text{normal} = (1-y)A + yB, \qquad \text{swapped} = (1-y)B + yA
+                \]
+                \[
+                \text{out} = (1-b_{11})(1-a_{11})\, \text{cross} + b_{11}\, \text{normal} + a_{11}\, \text{swapped}
+                \]
+            </p>
+            <p>
+                以上由 <code>morph_dsp.py</code> 中的 <code>morph_positive_spectrum</code> 与
+                <code>render_core</code> 实现，本页为它在浏览器（AudioWorklet）中的实时移植。
+            </p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">参数</h3>
+        <div class="section_content">
+            <p>从 <code>0x1001fd10</code> 参数表恢复出的 12 个参数默认值：</p>
+            <table>
+                <tr><th>参数</th><th>默认值</th><th>本页控件</th></tr>
+                <tr><td>MixA</td><td>0</td><td>-（保留，默认 0）</td></tr>
+                <tr><td>MixB</td><td>0</td><td>-（保留，默认 0）</td></tr>
+                <tr><td>Volume</td><td>1</td><td>Vol 滑杆（0~2）</td></tr>
+                <tr><td>MorphX</td><td>0.5</td><td>XY 垫 水平</td></tr>
+                <tr><td>MorphY</td><td>0</td><td>XY 垫 垂直</td></tr>
+                <tr><td>WetDry</td><td>0.2</td><td>Dry/Wet 滑杆（0~1）</td></tr>
+                <tr><td>RoomSize</td><td>0.2</td><td>Room 滑杆（0~1）</td></tr>
+                <tr><td>ControlX</td><td>0</td><td>-（未映射）</td></tr>
+                <tr><td>ControlY</td><td>0</td><td>-（未映射）</td></tr>
+                <tr><td>Mode</td><td>0</td><td>Wide 按钮</td></tr>
+                <tr><td>SoloA</td><td>0</td><td>-（未映射）</td></tr>
+                <tr><td>SoloB</td><td>0</td><td>-（未映射）</td></tr>
+            </table>
+            <p>
+                接入 WetDry / RoomSize 的大反馈延迟混响网络未能在逆向中验证，属于频谱形态化核心的外围部分。
+                本页使用 Web Audio 原生卷积混响（<code>ConvolverNode</code> + 指数衰减噪声脉冲响应）提供
+                Wet/Dry 与 Room 控制：<code>room_size</code> 决定脉冲响应长度与衰减（0.4s~4s 尾音），
+                <code>wet_dry</code> 在干信号与混响之间交叉淡化。
+            </p>
+        </div>
+    </section>
+
+    <script src="../../../main.js"></script>
+    <script>
+        (function () {
+            'use strict';
+            const $ = (id) => document.getElementById(id);
+
+            const state = {
+                sources: [null, null],   // Float32Array 单声道（统一采样率）
+                names: ['', ''],
+                rate: 0,
+                ctx: null,
+                worklet: null,
+                dryGain: null,   // 原生混响图（ConvolverNode）
+                wetGain: null,
+                convolver: null,
+                params: {
+                    morph_x: 0.5,
+                    morph_y: 0.0,
+                    volume: 1.0,
+                    wet_dry: 0.25,
+                    room_size: 0.2,
+                    mode: false,
+                    mix_a: 0.0,
+                    mix_b: 0.0,
+                },
+            };
+
+            const status = (msg) => { $('pp-status').textContent = msg; };
+
+            // 只向 worklet 发送它需要的参数；WetDry/Room 由主线程原生混响图处理
+            function sendParams() {
+                if (!state.worklet) return;
+                const p = state.params;
+                state.worklet.port.postMessage({
+                    type: 'params',
+                    morph_x: p.morph_x,
+                    morph_y: p.morph_y,
+                    volume: p.volume,
+                    mode: p.mode,
+                    mix_a: p.mix_a,
+                    mix_b: p.mix_b,
+                });
+            }
+
+            function sendSources() {
+                if (!state.worklet) return;
+                const a = new Float32Array(state.sources[0]);
+                const b = new Float32Array(state.sources[1]);
+                state.worklet.port.postMessage({ type: 'sources', a, b }, [a.buffer, b.buffer]);
+            }
+
+            // 生成指数衰减噪声脉冲响应（Web Audio 原生卷积混响）
+            function makeImpulse(ctx, room) {
+                room = Math.max(0, Math.min(1, room));
+                const seconds = 0.4 + 3.6 * room;          // 0.4s ~ 4.0s 尾音
+                const len = Math.max(1, Math.round(ctx.sampleRate * seconds));
+                const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+                const k = 14 - 12 * room;                  // 衰减速率（越大越短促）
+                for (let ch = 0; ch < 2; ch++) {
+                    const d = buf.getChannelData(ch);
+                    for (let i = 0; i < len; i++) {
+                        d[i] = (Math.random() * 2 - 1) * Math.exp(-k * i / ctx.sampleRate);
+                    }
+                }
+                // 能量归一化：每声道 Σd[i]² = 1，使不同 room 长度的混响响度一致
+                for (let ch = 0; ch < 2; ch++) {
+                    const d = buf.getChannelData(ch);
+                    let e = 0;
+                    for (let i = 0; i < len; i++) e += d[i] * d[i];
+                    if (e > 0) {
+                        const g = 1 / Math.sqrt(e);
+                        for (let i = 0; i < len; i++) d[i] *= g;
+                    }
+                }
+                return buf;
+            }
+
+            // 应用 Wet/Dry 与 Room（主线程原生节点，实时生效）
+            function applyReverb() {
+                if (!state.convolver) return;
+                const p = state.params;
+                const wd = Math.max(0, Math.min(1, p.wet_dry));
+                state.dryGain.gain.value = 1 - wd;
+                state.wetGain.gain.value = wd;
+                state.convolver.buffer = makeImpulse(state.ctx, p.room_size);
+            }
+
+            // 解码 + 重采样到目标采样率（取第一声道）
+            // 用独立的 OfflineAudioContext 解码，避免与播放上下文刚创建时的竞态
+            let decodeCtx = null;
+            function getDecodeCtx() {
+                if (!decodeCtx) decodeCtx = new OfflineAudioContext(1, 1, 44100);
+                return decodeCtx;
+            }
+
+            async function decodeResample(arrayBuffer, targetRate) {
+                const decoded = await getDecodeCtx().decodeAudioData(arrayBuffer);
+                const ch0 = decoded.getChannelData(0);
+                if (decoded.sampleRate === targetRate) return ch0.slice();
+                const n = Math.max(1, Math.round(ch0.length * targetRate / decoded.sampleRate));
+                const off = new OfflineAudioContext(1, n, targetRate);
+                const src = off.createBufferSource();
+                src.buffer = decoded;
+                src.connect(off.destination);
+                src.start();
+                const rendered = await off.startRendering();
+                return rendered.getChannelData(0);
+            }
+
+            async function loadFile(index, file) {
+                try {
+                    if (!state.ctx) {
+                        state.ctx = new AudioContext();
+                        state.rate = state.ctx.sampleRate;
+                    }
+                    const buf = await file.arrayBuffer();
+                    const mono = await decodeResample(buf, state.rate);
+                    state.sources[index] = mono;
+                    state.names[index] = file.name;
+                    const slot = $('slot-' + (index ? 'b' : 'a'));
+                    slot.querySelector('.pp-file').textContent =
+                        file.name + ' (' + mono.length + ' samples)';
+                    status('Loaded ' + file.name + '; first channel used');
+                    if (state.sources[0] && state.sources[1] && state.worklet) sendSources();
+                } catch (e) {
+                    status('加载失败: ' + e.message);
+                }
+            }
+
+            async function play() {
+                if (!state.sources[0] || !state.sources[1]) {
+                    status('请先加载 A/B 两个源文件');
+                    return;
+                }
+                if (!state.ctx) {
+                    state.ctx = new AudioContext();
+                    state.rate = state.ctx.sampleRate;
+                }
+                if (!state.worklet) {
+                    try {
+                        await state.ctx.audioWorklet.addModule('morph_worklet.js');
+                        state.worklet = new AudioWorkletNode(state.ctx, 'morph-processor', {
+                            outputChannelCount: [2],
+                        });
+                        // 混响图：worklet -> dryGain -> dest; worklet -> convolver -> wetGain -> dest
+                        state.dryGain = state.ctx.createGain();
+                        state.wetGain = state.ctx.createGain();
+                        state.convolver = state.ctx.createConvolver();
+                        state.convolver.normalize = false;
+                        state.worklet.connect(state.dryGain);
+                        state.worklet.connect(state.convolver);
+                        state.dryGain.connect(state.ctx.destination);
+                        state.convolver.connect(state.wetGain);
+                        state.wetGain.connect(state.ctx.destination);
+                        applyReverb();
+                        sendSources();
+                    } catch (e) {
+                        status('AudioWorklet 初始化失败（需要 http/https 环境）: ' + e.message);
+                        return;
+                    }
+                }
+                await state.ctx.resume();
+                const p = state.params;
+                state.worklet.port.postMessage({
+                    type: 'params',
+                    morph_x: p.morph_x, morph_y: p.morph_y, volume: p.volume,
+                    mode: p.mode, mix_a: p.mix_a, mix_b: p.mix_b, running: true,
+                });
+                status('playing');
+            }
+
+            function stop() {
+                if (state.worklet) {
+                    state.worklet.port.postMessage({ type: 'params', running: false });
+                }
+                if (state.ctx) state.ctx.suspend();
+                status('stopped');
+            }
+
+            // ---------- XY 垫 ----------
+            const pad = $('pp-pad');
+            const padCtx = pad.getContext('2d');
+            const PAD = 12, PSIZE = 336;
+
+            function drawPad(x, y) {
+                padCtx.clearRect(0, 0, 360, 360);
+                padCtx.fillStyle = '#171b20';
+                padCtx.fillRect(0, 0, 360, 360);
+                padCtx.strokeStyle = '#2f3943';
+                padCtx.lineWidth = 1;
+                padCtx.beginPath(); padCtx.moveTo(180, 12); padCtx.lineTo(180, 348); padCtx.stroke();
+                padCtx.beginPath(); padCtx.moveTo(12, 180); padCtx.lineTo(348, 180); padCtx.stroke();
+                padCtx.fillStyle = '#9aa8b5';
+                padCtx.font = '12px sans-serif';
+                padCtx.fillText('A', 20, 26);
+                padCtx.fillText('B', 334, 344);
+                padCtx.fillStyle = '#4ea1ff';
+                const px = PAD + x * PSIZE;
+                const py = 348 - y * PSIZE;
+                padCtx.beginPath();
+                padCtx.arc(px, py, 8, 0, 2 * Math.PI);
+                padCtx.fill();
+                $('pp-xytext').textContent =
+                    'X ' + x.toFixed(3) + '   Y ' + y.toFixed(3);
+            }
+
+            function padToXY(e) {
+                const rect = pad.getBoundingClientRect();
+                const scale = 360 / rect.width;
+                let cx = (e.clientX - rect.left) * scale;
+                let cy = (e.clientY - rect.top) * scale;
+                let x = (cx - PAD) / PSIZE;
+                let y = 1 - (cy - PAD) / PSIZE;
+                x = Math.max(0, Math.min(1, x));
+                y = Math.max(0, Math.min(1, y));
+                state.params.morph_x = x;
+                state.params.morph_y = y;
+                drawPad(x, y);
+                sendParams();
+            }
+
+            pad.addEventListener('pointerdown', (e) => {
+                pad.setPointerCapture(e.pointerId);
+                padToXY(e);
+            });
+            pad.addEventListener('pointermove', (e) => {
+                if (e.buttons & 1) padToXY(e);
+            });
+
+            // ---------- 滑杆 ----------
+            function bindSlider(id, key, fmt, onChange) {
+                const el = $(id);
+                const valEl = $(id + '-val');
+                el.addEventListener('input', () => {
+                    const v = parseFloat(el.value);
+                    state.params[key] = v;
+                    valEl.textContent = fmt(v);
+                    if (onChange) onChange(v);
+                });
+            }
+            bindSlider('vol', 'volume', (v) => v.toFixed(2), () => sendParams());
+            bindSlider('dw', 'wet_dry', (v) => v.toFixed(2), () => applyReverb());
+            bindSlider('room', 'room_size', (v) => v.toFixed(2), () => applyReverb());
+
+            // ---------- Wide ----------
+            const wideBtn = $('btn-wide');
+            wideBtn.addEventListener('click', () => {
+                state.params.mode = !state.params.mode;
+                wideBtn.classList.toggle('on', state.params.mode);
+                sendParams();
+            });
+
+            // ---------- 文件加载 ----------
+            const fileInput = $('file-input');
+            let pendingSlot = 0;
+            document.querySelectorAll('.pp-browse').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    pendingSlot = parseInt(btn.dataset.slot, 10);
+                    fileInput.click();
+                });
+            });
+            document.querySelectorAll('.pp-slot').forEach((slot) => {
+                slot.addEventListener('click', () => {
+                    pendingSlot = slot.id === 'slot-a' ? 0 : 1;
+                    fileInput.click();
+                });
+            });
+            fileInput.addEventListener('change', () => {
+                const f = fileInput.files[0];
+                if (f) loadFile(pendingSlot, f);
+                fileInput.value = '';
+            });
+
+            // 拖放
+            document.querySelectorAll('.pp-slot').forEach((slot) => {
+                slot.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    slot.classList.add('drag');
+                });
+                slot.addEventListener('dragleave', () => slot.classList.remove('drag'));
+                slot.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    slot.classList.remove('drag');
+                    const f = e.dataTransfer.files[0];
+                    if (f) loadFile(slot.id === 'slot-a' ? 0 : 1, f);
+                });
+            });
+
+            // ---------- 事件绑定 ----------
+            $('btn-play').addEventListener('click', play);
+            $('btn-stop').addEventListener('click', stop);
+            drawPad(0.5, 0);
+        })();
+    </script>
+</body>
+
+</html>
