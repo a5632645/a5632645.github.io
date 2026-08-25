@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滤波器频率计算</title>
+
+    <link rel="stylesheet" href="/main.css">
+    <!-- math -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .calc-input {
+            background-color: #ffffff;
+            border: 2px inset #808080;
+            border-color: #808080 #FFFFFF #FFFFFF #808080;
+            padding: 2px 4px;
+            font-size: 13px;
+            width: 110px;
+        }
+
+        .calc-unit {
+            background-color: #c0c0c0;
+            border: 2px outset #ffffff;
+            border-color: #FFFFFF #808080 #808080 #FFFFFF;
+            padding: 2px 4px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .calc-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 6px 0;
+            flex-wrap: wrap;
+        }
+
+        .calc-row label {
+            min-width: 60px;
+            font-weight: bold;
+        }
+
+        .calc-result {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+
+        .calc-result b {
+            color: #000080;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <button onclick="window.location.href='/index.html'">back</button>
+        <b>滤波器频率计算</b>
+        <hr>
+    </div>
+
+    <section>
+        <h3 class="section-title">RC 低通滤波器</h3>
+        <div class="section_content">
+            <p>截止频率（-3dB 点）：</p>
+            <p>\[f_{c}=\frac{1}{2\pi RC}\]</p>
+            <hr>
+            <div class="calc-row">
+                <label>R</label>
+                <input class="calc-input" id="rc-R" type="number" value="1" min="0" step="any" inputmode="decimal">
+                <select class="calc-unit" id="rc-R-unit">
+                    <option value="1">Ω</option>
+                    <option value="1e3">kΩ</option>
+                    <option value="1e6">MΩ</option>
+                </select>
+            </div>
+            <div class="calc-row">
+                <label>C</label>
+                <input class="calc-input" id="rc-C" type="number" value="100" min="0" step="any" inputmode="decimal">
+                <select class="calc-unit" id="rc-C-unit">
+                    <option value="1e-12">pF</option>
+                    <option value="1e-9">nF</option>
+                    <option value="1e-6" selected>µF</option>
+                    <option value="1e-3">mF</option>
+                </select>
+            </div>
+            <hr>
+            <div class="calc-result">
+                截止频率 f<sub>c</sub> = <b id="rc-out">--</b>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">CLC pi 型滤波器</h3>
+        <div class="section_content">
+            <p>CLC pi 型滤波器由 C1 - L - C2 组成。它的特征频率有两种常用定义：</p>
+            <p>
+                \[f_{series}=\frac{1}{2\pi\sqrt{L\frac{C_{1}C_{2}}{C_{1}+C_{2}}}}\]
+            </p>
+            <p class="centered">串联等效电容谐振频率（固有频率，无负载时传递函数极点）</p>
+            <p>
+                \[f_{para}=\frac{1}{2\pi\sqrt{L(C_{1}+C_{2})}}\]
+            </p>
+            <p class="centered">并联近似（EMI/电源滤波手册常用）</p>
+            <hr>
+            <div class="calc-row">
+                <label>C1</label>
+                <input class="calc-input" id="clc-C1" type="number" value="100" min="0" step="any" inputmode="decimal">
+                <select class="calc-unit" id="clc-C1-unit">
+                    <option value="1e-12">pF</option>
+                    <option value="1e-9">nF</option>
+                    <option value="1e-6" selected>µF</option>
+                    <option value="1e-3">mF</option>
+                </select>
+            </div>
+            <div class="calc-row">
+                <label>L</label>
+                <input class="calc-input" id="clc-L" type="number" value="10" min="0" step="any" inputmode="decimal">
+                <select class="calc-unit" id="clc-L-unit">
+                    <option value="1e-9">nH</option>
+                    <option value="1e-6" selected>µH</option>
+                    <option value="1e-3">mH</option>
+                </select>
+            </div>
+            <div class="calc-row">
+                <label>C2</label>
+                <input class="calc-input" id="clc-C2" type="number" value="100" min="0" step="any" inputmode="decimal">
+                <select class="calc-unit" id="clc-C2-unit">
+                    <option value="1e-12">pF</option>
+                    <option value="1e-9">nF</option>
+                    <option value="1e-6" selected>µF</option>
+                    <option value="1e-3">mF</option>
+                </select>
+            </div>
+            <hr>
+            <table>
+                <tr>
+                    <th>定义</th>
+                    <th>频率</th>
+                </tr>
+                <tr>
+                    <td>串联等效谐振<br>f = 1/(2π√(L·C1·C2/(C1+C2)))</td>
+                    <td><b id="clc-out-series">--</b></td>
+                </tr>
+                <tr>
+                    <td>并联近似<br>f = 1/(2π√(L·(C1+C2)))</td>
+                    <td><b id="clc-out-para">--</b></td>
+                </tr>
+            </table>
+        </div>
+    </section>
+
+    <script>
+        const PI2 = 2 * Math.PI;
+
+        function fmtHz(f) {
+            if (!isFinite(f) || f <= 0) {
+                return "--";
+            }
+            const units = [
+                { v: 1e9, n: "GHz" },
+                { v: 1e6, n: "MHz" },
+                { v: 1e3, n: "kHz" },
+                { v: 1, n: "Hz" },
+            ];
+            for (const u of units) {
+                if (f >= u.v) {
+                    const x = f / u.v;
+                    const s = x >= 100 ? x.toPrecision(4) : x.toPrecision(3);
+                    return s + " " + u.n;
+                }
+            }
+            return f.toPrecision(3) + " Hz";
+        }
+
+        function readVal(id, idUnit) {
+            const v = parseFloat(document.getElementById(id).value);
+            const mul = parseFloat(document.getElementById(idUnit).value);
+            if (!isFinite(v) || !isFinite(mul) || v <= 0) {
+                return NaN;
+            }
+            return v * mul;
+        }
+
+        function calcRC() {
+            const R = readVal("rc-R", "rc-R-unit");
+            const C = readVal("rc-C", "rc-C-unit");
+            const out = document.getElementById("rc-out");
+            if (!isFinite(R) || !isFinite(C)) {
+                out.textContent = "--";
+                return;
+            }
+            out.textContent = fmtHz(1 / (PI2 * R * C));
+        }
+
+        function calcCLC() {
+            const C1 = readVal("clc-C1", "clc-C1-unit");
+            const L = readVal("clc-L", "clc-L-unit");
+            const C2 = readVal("clc-C2", "clc-C2-unit");
+            const outSeries = document.getElementById("clc-out-series");
+            const outPara = document.getElementById("clc-out-para");
+            if (!isFinite(C1) || !isFinite(L) || !isFinite(C2)) {
+                outSeries.textContent = "--";
+                outPara.textContent = "--";
+                return;
+            }
+            const Cser = (C1 * C2) / (C1 + C2);
+            outSeries.textContent = fmtHz(1 / (PI2 * Math.sqrt(L * Cser)));
+            outPara.textContent = fmtHz(1 / (PI2 * Math.sqrt(L * (C1 + C2))));
+        }
+
+        function bind(ids, fn) {
+            for (const id of ids) {
+                const el = document.getElementById(id);
+                el.addEventListener("input", fn);
+                el.addEventListener("change", fn);
+            }
+        }
+
+        bind(["rc-R", "rc-R-unit", "rc-C", "rc-C-unit"], calcRC);
+        bind(["clc-C1", "clc-C1-unit", "clc-L", "clc-L-unit", "clc-C2", "clc-C2-unit"], calcCLC);
+
+        calcRC();
+        calcCLC();
+    </script>
+
+    <script src="/main.js"></script>
+</body>
+</html>

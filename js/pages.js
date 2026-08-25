@@ -42,6 +42,12 @@ const dspPages = [
 
 const mcuPages = [
   {
+    update_date: "2026-8-24",
+    title: "滤波器频率计算",
+    href: "mcu/filter/index.html",
+    img: "https://ts1.tc.mm.bing.net/th/id/OIP-C.0f7oZ4MGKp3tfmGSd8jkSAHaDk?r=0&rs=1&pid=ImgDetMain&o=7&rm=3"
+  },
+  {
     update_date: "2026-5-5",
     title: "玩 rtthread titan mini",
     href: "mcu/titan_mini/index.html",
