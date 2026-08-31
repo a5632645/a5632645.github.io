@@ -1,5 +1,10 @@
 const dspPages = [
   {
+    update_date: "2026-8-31",
+    title: "实时PGHI移调器",
+    href: "dsp/pghi/index.html",
+  },
+  {
     update_date: "2026-8-15",
     title: "插件逆向还原: Prosoniq Morph",
     href: "dsp/reverse/morph/index.html",

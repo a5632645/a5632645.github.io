@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时 PGHI 移调器（playing.cpp 移植）</title>
+
+    <link rel="stylesheet" href="/main.css">
+    <!-- code -->
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <!-- math -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        /* ============ Win95 风格控件（与博客一致） ============ */
+        .win-panel {
+            background-color: #c0c0c0;
+            border: 1px solid #808080;
+            box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #404040;
+            padding: 8px 10px;
+            margin: 10px 0;
+            max-width: 940px;
+        }
+
+        .win-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #000060;
+            margin-bottom: 8px;
+            font-family: Consolas, monospace;
+            letter-spacing: 0.5px;
+        }
+
+        .win-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .win-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .win-label {
+            font-size: 12px;
+            color: #1a1a1a;
+        }
+
+        /* .win-btn 为全局 push/switch button 类（main.css），
+           按下时 border 恒 2px 仅切换 outset/inset，不改变按钮大小 */
+        .win-btn {
+            font-family: Consolas, monospace;
+        }
+
+        .win-btn.on {
+            background-color: #4cc997;
+        }
+
+        .win-select {
+            font-size: 12px;
+            font-family: Consolas, monospace;
+            padding: 1px 4px;
+        }
+
+        .win-range {
+            width: 180px;
+            accent-color: #000060;
+        }
+
+        .win-val {
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            color: #1a1a1a;
+            min-width: 60px;
+        }
+
+        .src-radio {
+            font-size: 13px;
+            margin-right: 14px;
+            cursor: pointer;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .status-on {
+            background-color: #4cc997;
+        }
+
+        .status-off {
+            background-color: #e1ac4a;
+        }
+
+        #fileInfo {
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            color: #333333;
+        }
+
+        #wave {
+            display: block;
+            background-color: #101214;
+            border: 1px solid #2e3238;
+            max-width: 900px;
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .pp-note {
+            color: #666666;
+            font-size: 12px;
+            margin-top: 10px;
+            max-width: 720px;
+        }
+
+        .mode-btns {
+            display: inline-flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .mode-btns .win-btn {
+            padding: 3px 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="page-header">
+        <button onclick="window.location.href='/index.html'">back</button>
+        <b>实时 PGHI 移调器（playing.cpp 移植）</b>
+        <hr>
+    </div>
+
+    <section>
+        <h3 class="section-title">交互式重现</h3>
+        <div class="section_content">
+            <p>
+                <b>HOP 大小</b>与<b>窗函数类型</b>作为参数提供，窗长按 COLA 条件取 HOP 的
+                4 / 6 / 8 倍重叠：hann 用 ×4、三项 Blackman-Harris 用 ×6、标准四项 Blackman-Harris 用 ×8
+                （即窗长 = HOP × 重叠因子），FFT 大小 = 2 × 窗长取最近 2 的幂
+                （默认 HOP 512 / 三项 Blackman-Harris，即原 <code>playing.cpp</code> 配置）。切换 HOP 或窗函数会重建处理链并清空状态。
+            </p>
+
+            <div class="win-panel">
+                <div class="win-title">AUDIO INPUT</div>
+                <div class="win-row">
+                    <label class="src-radio"><input type="radio" name="src" value="file" checked> 2. 播放音频文件</label>
+                    <label class="src-radio"><input type="radio" name="src" value="mic"> 1. 麦克风输入</label>
+                </div>
+                <div class="win-row" id="fileZone">
+                    <input type="file" id="fileInput" accept="audio/*">
+                    <button class="win-btn" id="playBtn">播放</button>
+                    <button class="win-btn" id="pauseBtn">暂停</button>
+                    <button class="win-btn" id="stopBtn">停止</button>
+                    <label class="win-label"><input type="checkbox" id="loopChk" checked> 循环</label>
+                    <span id="fileInfo">未加载文件</span>
+                </div>
+                <div class="win-row">
+                    <button class="win-btn" id="micBtn">开始麦克风监听</button>
+                    <span class="win-label" id="micHint">需要浏览器麦克风授权</span>
+                </div>
+            </div>
+
+            <div class="win-panel">
+                <div class="win-title">PROCESSING PARAMETERS</div>
+                <div class="win-row">
+                    <span class="win-label">HOP 大小</span>
+                    <select class="win-select" id="hopSel">
+                        <option value="128">128</option>
+                        <option value="256">256</option>
+                        <option value="512" selected>512</option>
+                        <option value="1024">1024</option>
+                    </select>
+                    <span class="win-label">窗函数</span>
+                    <select class="win-select" id="winSel">
+                        <option value="hann">hann (×4)</option>
+                        <option value="blackman-harris-3term" selected>blackman-harris 3-term (×6)</option>
+                        <option value="blackman-harris">blackman-harris 4-term (×8)</option>
+                    </select>
+                    <span class="win-val" id="winInfo"></span>
+                    <span class="win-label">音高</span>
+                    <input class="win-range" type="range" id="pitchRange" min="-12" max="12" step="1" value="0">
+                    <span class="win-val" id="pitchVal">+0 st</span>
+                </div>
+                <div class="win-row">
+                    <span class="win-label">瞬态检测</span>
+                    <div class="mode-btns" id="modeBtns">
+                        <button class="win-btn" data-mode="0">None</button>
+                        <button class="win-btn" data-mode="1">Flux</button>
+                        <button class="win-btn" data-mode="2">SuperFlux</button>
+                        <button class="win-btn" data-mode="3">Vocoder</button>
+                        <button class="win-btn on" data-mode="4">DSPark</button>
+                    </div>
+                    <button class="win-btn" id="bypassBtn">BYPASS: OFF</button>
+                    <span class="win-label">输出音量</span>
+                    <input class="win-range" type="range" id="volRange" min="0" max="150" step="5" value="100">
+                </div>
+            </div>
+
+            <div class="win-panel" style="display:flex; align-items:center; gap:8px; padding:6px 10px;">
+                <span class="status-dot status-off" id="statusDot"></span>
+                <span class="win-label" id="statusText">AUDIO OFFLINE — 需要 http/https 环境（AudioWorklet）</span>
+            </div>
+
+            <canvas id="wave" width="900" height="180"></canvas>
+
+            <div class="pp-note">
+                <b>使用说明</b>：选择输入源后点击播放/监听即可。拖动音高、切换瞬态模式、HOP 与窗函数均实时生效
+                （HOP/窗函数切换会清空处理状态，需重新填满窗长采样）。音频文件在本地浏览器中解码，不会上传。
+                输出为单声道，与 C++ 版一致。
+            </div>
+            <div class="pp-note">
+                <b>算法</b>：PGHI（Phase Gradient Heap Integration）按幅度从大到小遍历 bin，
+                先由相位梯度预测相位（分析 hop 的相位增量按拉伸比映射），再把相邻 bin 相位梯度依次外推；
+                幅度/相位谱由 IFFT 合成为时域后，用预计算的 Blackman 窗 sinc 核插值重采样得到最终输出。
+                瞬态检测（Flux / SuperFlux / Vocoder / DSPark）检测到瞬态时直接重置合成相位，避免相位声码器对打击乐的拖尾模糊。
+            </div>
+
+        </div>
+    </section>
+
+    <script>
+        'use strict';
+
+        const MODE_NAMES = ['None', 'Flux', 'SuperFlux', 'Vocoder', 'DSPark'];
+        const state = {
+            ctx: null,
+            worklet: null,
+            master: null,
+            micStream: null,
+            micSource: null,
+            fileSource: null,
+            fileBuffer: null,
+            srcMode: 'file',
+            playing: false,
+            startCtxTime: 0,
+            displayInfo: null,
+            params: { pitch: 0, mode: 4, bypass: false, hop: 512, window: 'blackman-harris-3term', vol: 1.0 },
+        };
+
+        // ---------------- AudioContext / Worklet ----------------
+
+        async function ensureAudio() {
+            if (state.ctx) return;
+            state.ctx = new AudioContext();
+            await state.ctx.audioWorklet.addModule('pghi_worklet.js');
+            state.worklet = new AudioWorkletNode(state.ctx, 'pghi-processor', { outputChannelCount: [1] });
+            state.master = state.ctx.createGain();
+            state.master.gain.value = state.params.vol;
+            state.worklet.connect(state.master);
+            state.master.connect(state.ctx.destination);
+            state.worklet.port.onmessage = (ev) => {
+                if (ev.data && ev.data.type === 'display') state.displayInfo = ev.data;
+            };
+            applyParams();
+            setStatus(true, 'AUDIO ONLINE — 输入源：' + (state.srcMode === 'mic' ? '麦克风' : '音频文件'));
+        }
+
+        function applyParams() {
+            if (!state.worklet) return;
+            state.worklet.port.postMessage({ type: 'params', ...state.params });
+        }
+
+        function setStatus(online, text) {
+            document.getElementById('statusDot').className = 'status-dot ' + (online ? 'status-on' : 'status-off');
+            document.getElementById('statusText').textContent = text;
+        }
+
+        // 窗长 / FFT 大小显示（与 worklet 的 WINDOW_DEFS 保持一致）
+        const WIN_OVERLAP = { 'hann': 4, 'blackman-harris-3term': 6, 'blackman-harris': 8 };
+
+        function updateWindowInfo() {
+            const hop = state.params.hop;
+            const winLen = hop * (WIN_OVERLAP[state.params.window] || 6);
+            let fft = 1;
+            while (fft < winLen * 2) fft <<= 1;
+            document.getElementById('winInfo').textContent =
+                '窗长 ' + winLen + ' / FFT ' + fft;
+        }
+
+        // ---------------- 输入源 ----------------
+
+        function stopSource() {
+            if (state.fileSource) {
+                try { state.fileSource.stop(); } catch (e) { /* 已结束 */ }
+                state.fileSource.onended = null;
+                state.fileSource = null;
+            }
+            if (state.micSource) {
+                state.micSource.disconnect();
+                state.micSource = null;
+            }
+            if (state.micStream) {
+                state.micStream.getTracks().forEach(t => t.stop());
+                state.micStream = null;
+            }
+            state.playing = false;
+            state.startCtxTime = 0;
+        }
+
+        async function startMic() {
+            await ensureAudio();
+            await state.ctx.resume();
+            stopSource();
+            state.srcMode = 'mic';
+            document.querySelector('input[name=src][value=mic]').checked = true;
+            try {
+                state.micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+                });
+                state.micSource = state.ctx.createMediaStreamSource(state.micStream);
+                state.micSource.connect(state.worklet);
+                state.playing = true;
+                setStatus(true, 'AUDIO ONLINE — 麦克风监听中');
+            } catch (err) {
+                setStatus(false, '麦克风访问失败：' + err.message);
+            }
+            updateFileZone();
+        }
+
+        async function loadFile(file) {
+            try {
+                await ensureAudio();
+                const buf = await file.arrayBuffer();
+                state.fileBuffer = await state.ctx.decodeAudioData(buf);
+                document.getElementById('fileInfo').textContent =
+                    file.name + '（' + state.fileBuffer.duration.toFixed(1) + ' s）';
+                playFile();
+            } catch (err) {
+                setStatus(false, '文件加载失败：' + err.message);
+            }
+        }
+
+        function playFile() {
+            if (!state.ctx || !state.fileBuffer) {
+                setStatus(false, '请先选择音频文件');
+                return;
+            }
+            state.srcMode = 'file';
+            document.querySelector('input[name=src][value=file]').checked = true;
+            stopSource();
+            state.ctx.resume();
+            const src = state.ctx.createBufferSource();
+            src.buffer = state.fileBuffer;
+            src.loop = document.getElementById('loopChk').checked;
+            src.connect(state.worklet);
+            src.start();
+            state.fileSource = src;
+            state.startCtxTime = state.ctx.currentTime;
+            state.playing = true;
+            state.fileSource.onended = () => { state.playing = false; updateFileZone(); };
+            updateFileZone();
+        }
+
+        function updateFileZone() {
+            document.getElementById('playBtn').disabled = false;
+            document.getElementById('pauseBtn').textContent = state.ctx && state.ctx.state === 'suspended'
+                ? '继续' : '暂停';
+        }
+
+        // ---------------- 波形绘制 ----------------
+
+        const CW = 900, CH = 180;
+        const waveTop = 24, waveBottom = CH - 6;
+
+        function draw() {
+            const cv = document.getElementById('wave');
+            const ctx = cv.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, CW, CH);
+
+            // 面板
+            ctx.fillStyle = '#101214';
+            ctx.fillRect(0, 0, CW, CH);
+
+            const info = state.displayInfo;
+            ctx.font = '12px Consolas, monospace';
+
+            if (!info) {
+                ctx.fillStyle = '#8a9098';
+                ctx.fillText('waiting for audio...', 12, 20);
+                requestAnimationFrame(draw);
+                return;
+            }
+
+            // 标题
+            ctx.fillStyle = '#e8edf2';
+            ctx.fillText('INPUT WAVEFORM (3 s)', 12, 18);
+            ctx.fillStyle = info.mode === 0 ? '#7e848b' : '#e1ac4a';
+            ctx.textAlign = 'right';
+            ctx.fillText(MODE_NAMES[info.mode], CW - 12, 18);
+            ctx.textAlign = 'left';
+
+            // 中线
+            const midY = (waveTop + waveBottom) * 0.5;
+            const halfH = (waveBottom - waveTop) * 0.5;
+            ctx.strokeStyle = '#3c4045';
+            ctx.beginPath();
+            ctx.moveTo(2, midY);
+            ctx.lineTo(CW - 2, midY);
+            ctx.stroke();
+
+            const cols = info.columns;
+            const colW = CW / cols;
+
+            // 列包络（k = 0 为最新一列，从右向左）
+            ctx.fillStyle = 'rgba(76, 201, 151, 0.85)';
+            for (let k = 0; k < cols; ++k) {
+                const idx = (info.colIndex - 1 - k + cols) % cols;
+                const mn = info.env[2 * idx];
+                const mx = info.env[2 * idx + 1];
+                const y1 = midY - Math.max(-1, Math.min(1, mx)) * halfH;
+                const y2 = midY - Math.max(-1, Math.min(1, mn)) * halfH;
+                const x = CW - (k + 1) * colW;
+                const h = Math.max(1, y2 - y1);
+                ctx.fillRect(x, y1, colW, h);
+            }
+
+            // 瞬态检测点竖线
+            if (info.mode !== 0 && info.markCount > 0) {
+                const samplesPerCol = info.displaySize / cols;
+                const pos = info.position;
+                ctx.fillStyle = '#e1ac4a';
+                const start = Math.max(0, info.markCount - info.marks.length);
+                for (let i = start; i < info.markCount; ++i) {
+                    const mark = info.marks[i % info.marks.length];
+                    if (mark > pos) continue;
+                    const age = pos - mark;
+                    if (age >= info.displaySize) continue;
+                    const x = CW - (age / samplesPerCol) * colW;
+                    ctx.fillRect(x, waveTop, 1, waveBottom - waveTop);
+                }
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // ---------------- 控件绑定 ----------------
+
+        function bindControls() {
+            document.querySelectorAll('input[name=src]').forEach(r => {
+                r.addEventListener('change', async () => {
+                    if (r.value === state.srcMode) return;
+                    state.srcMode = r.value;
+                    stopSource();
+                    if (r.value === 'mic') {
+                        await startMic();
+                    } else if (state.fileBuffer) {
+                        playFile();
+                    }
+                });
+            });
+
+            document.getElementById('micBtn').addEventListener('click', startMic);
+
+            document.getElementById('fileInput').addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+            });
+            document.getElementById('playBtn').addEventListener('click', () => {
+                if (state.fileBuffer) { playFile(); }
+                else { document.getElementById('fileInput').click(); }
+            });
+            document.getElementById('pauseBtn').addEventListener('click', async () => {
+                if (!state.ctx) return;
+                if (state.ctx.state === 'running') await state.ctx.suspend();
+                else await state.ctx.resume();
+                updateFileZone();
+            });
+            document.getElementById('stopBtn').addEventListener('click', () => {
+                stopSource();
+                if (state.ctx && state.ctx.state === 'suspended') state.ctx.resume();
+                updateFileZone();
+            });
+
+            document.getElementById('loopChk').addEventListener('change', () => {
+                if (state.fileSource) {
+                    state.fileSource.loop = document.getElementById('loopChk').checked;
+                }
+            });
+
+            document.getElementById('hopSel').addEventListener('change', (e) => {
+                state.params.hop = parseInt(e.target.value, 10);
+                applyParams();
+                updateWindowInfo();
+            });
+            document.getElementById('winSel').addEventListener('change', (e) => {
+                state.params.window = e.target.value;
+                applyParams();
+                updateWindowInfo();
+            });
+
+            const pitchRange = document.getElementById('pitchRange');
+            pitchRange.addEventListener('input', () => {
+                state.params.pitch = parseInt(pitchRange.value, 10);
+                document.getElementById('pitchVal').textContent =
+                    (state.params.pitch > 0 ? '+' : '') + state.params.pitch + ' st';
+                applyParams();
+            });
+
+            document.querySelectorAll('#modeBtns .win-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    state.params.mode = parseInt(btn.dataset.mode, 10);
+                    document.querySelectorAll('#modeBtns .win-btn').forEach(b =>
+                        b.classList.toggle('on', b === btn));
+                    applyParams();
+                });
+            });
+
+            document.getElementById('bypassBtn').addEventListener('click', () => {
+                state.params.bypass = !state.params.bypass;
+                document.getElementById('bypassBtn').textContent =
+                    state.params.bypass ? 'BYPASS: ON' : 'BYPASS: OFF';
+                document.getElementById('bypassBtn').classList.toggle('on', state.params.bypass);
+                applyParams();
+            });
+
+            document.getElementById('volRange').addEventListener('input', (e) => {
+                state.params.vol = parseInt(e.target.value, 10) / 100;
+                if (state.master) state.master.gain.value = state.params.vol;
+            });
+
+            // 文件播放进度
+            setInterval(() => {
+                if (state.srcMode === 'file' && state.fileSource && state.fileBuffer && state.ctx
+                    && state.ctx.state === 'running') {
+                    const dur = state.fileBuffer.duration;
+                    let pos = state.ctx.currentTime - state.startCtxTime;
+                    if (state.fileSource.loop) pos = pos % dur;
+                    const fmt = (s) => {
+                        s = Math.max(0, Math.floor(s));
+                        return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+                    };
+                    document.getElementById('fileInfo').textContent = fmt(pos) + ' / ' + fmt(dur);
+                }
+            }, 250);
+        }
+
+        bindControls();
+        updateWindowInfo();
+        draw();
+    </script>
+</body>
+
+</html>

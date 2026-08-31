@@ -226,6 +226,35 @@ button:active {
 }
 
 /* ============================================
+   Push / Switch Button — Classic Windows 3D
+   Raised style by default; `.on` / `:active`
+   toggle to inset with the same 2px border so
+   pressing never changes the button's size.
+   ============================================ */
+.win-btn {
+    background-color: #c0c0c0;
+    outline: 1px solid #000000;
+    border: 2px outset #ffffff;
+    border-color: #FFFFFF #808080 #808080 #FFFFFF;
+    padding: 2px 12px;
+    margin: 2px 0px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.win-btn:hover {
+    background-color: #d4d4d4;
+}
+
+.win-btn:active,
+.win-btn.on {
+    background-color: #c0c0c0;
+    border: 2px inset #808080;
+    border-color: #808080 #FFFFFF #FFFFFF #808080;
+    color: #000000;
+}
+
+/* ============================================
    Catalog (Table of Contents) — Windows Dialog Style
    ============================================ */
 .catalog-button {
