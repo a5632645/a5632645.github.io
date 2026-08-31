@@ -177,12 +177,7 @@
                 <div class="win-title">PROCESSING PARAMETERS</div>
                 <div class="win-row">
                     <span class="win-label">HOP 大小</span>
-                    <select class="win-select" id="hopSel">
-                        <option value="128">128</option>
-                        <option value="256">256</option>
-                        <option value="512" selected>512</option>
-                        <option value="1024">1024</option>
-                    </select>
+                    <select class="win-select" id="hopSel"><!-- 128~1024 步长 64 由 JS 生成 --></select>
                     <span class="win-label">窗函数</span>
                     <select class="win-select" id="winSel">
                         <option value="hann">hann (×4)</option>
@@ -204,6 +199,12 @@
                         <button class="win-btn on" data-mode="4">DSPark</button>
                     </div>
                     <button class="win-btn" id="bypassBtn">BYPASS: OFF</button>
+                </div>
+                <div class="win-row">
+                    <span class="win-label">冷却时间</span>
+                    <input class="win-range" type="range" id="cooldownRange" min="0" max="300" step="1" value="64">
+                    <span class="win-val" id="cooldownVal">64 ms</span>
+                    <span class="win-label" style="color:#666666;">所有瞬态检测器统一使用（0 = 无冷却）</span>
                     <span class="win-label">输出音量</span>
                     <input class="win-range" type="range" id="volRange" min="0" max="150" step="5" value="100">
                 </div>
@@ -211,7 +212,7 @@
 
             <div class="win-panel" style="display:flex; align-items:center; gap:8px; padding:6px 10px;">
                 <span class="status-dot status-off" id="statusDot"></span>
-                <span class="win-label" id="statusText">AUDIO OFFLINE — 需要 http/https 环境（AudioWorklet）</span>
+                <span class="win-label" id="statusText">AUDIO OFFLINE — 需要 http/https 环境（AudioWorklet + wasm）</span>
             </div>
 
             <canvas id="wave" width="900" height="180"></canvas>
@@ -226,9 +227,42 @@
                 先由相位梯度预测相位（分析 hop 的相位增量按拉伸比映射），再把相邻 bin 相位梯度依次外推；
                 幅度/相位谱由 IFFT 合成为时域后，用预计算的 Blackman 窗 sinc 核插值重采样得到最终输出。
                 瞬态检测（Flux / SuperFlux / Vocoder / DSPark）检测到瞬态时直接重置合成相位，避免相位声码器对打击乐的拖尾模糊。
+                DSP 核心由 C++ 编译为 WebAssembly（<code>pghi_shifter.wasm</code>），在 AudioWorklet 中运行，主线程仅负责加载与参数传递。
             </div>
-
         </div>
+    </section>
+
+    <section>
+        <h3 class="section-title">引用项目</h3>
+            <ul>
+                <li>
+                    <a href="https://github.com/CristianMoresi/DSPark">CristianMoresi/DSPark</a>
+                    — header-only C++20 音频 DSP 库；本页 DSPark 瞬态检测即其谱通量（对数滤波器组 + 运行中位数 + 固定增量）的移植。
+                </li>
+                <li>
+                    <a href="https://github.com/audiojs/stretch">audiojs/stretch</a>
+                    — JS 时间拉伸算法库（@audio/stretch），聚合 WSOLA / PSOLA / 多种相位声码器（含 pghi、transient、hybrid 等）。
+                </li>
+                <li>
+                    <a href="https://github.com/y-fujii/mini_pvdr">y-fujii/mini_pvdr</a>
+                    — 基于 PGHI 的复调音频时间伸缩与变调工具（Python 相位声码器实现）。
+                </li>
+                <li>
+                    <a href="https://github.com/Hajime-san/phase-gradient-vocoder">Hajime-san/phase-gradient-vocoder</a>
+                    — “Phase Vocoder Done Right” 的 Rust 实现，支持时间拉伸与变调。
+                </li>
+            </ul>
+    </section>
+
+    <section>
+        <h3 class="section-title">仓库推荐</h3>
+            <ul>
+                <li>
+                    <a href="https://github.com/bungee-audio-stretch/bungee">bungee-audio-stretch/bungee</a>
+                    — 现代 C++ 相位声码器时间拉伸/变调库，实时或离线；支持变速不变调、变调不变速，
+                    以及连续变化的播放头（含零速/负速），适合 smooth scrub 与慢动作渲染。
+                </li>
+            </ul>
     </section>
 
     <script>
@@ -247,7 +281,7 @@
             playing: false,
             startCtxTime: 0,
             displayInfo: null,
-            params: { pitch: 0, mode: 4, bypass: false, hop: 512, window: 'blackman-harris-3term', vol: 1.0 },
+            params: { pitch: 0, mode: 4, bypass: false, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
         };
 
         // ---------------- AudioContext / Worklet ----------------
@@ -262,10 +296,27 @@
             state.worklet.connect(state.master);
             state.master.connect(state.ctx.destination);
             state.worklet.port.onmessage = (ev) => {
-                if (ev.data && ev.data.type === 'display') state.displayInfo = ev.data;
+                const d = ev.data;
+                if (!d) return;
+                if (d.type === 'display') {
+                    state.displayInfo = d;
+                } else if (d.type === 'wasm-ready') {
+                    applyParams();
+                    setStatus(true, 'AUDIO ONLINE — 输入源：' + (state.srcMode === 'mic' ? '麦克风' : '音频文件'));
+                } else if (d.type === 'wasm-error') {
+                    setStatus(false, 'wasm 初始化失败：' + d.message);
+                }
             };
-            applyParams();
-            setStatus(true, 'AUDIO ONLINE — 输入源：' + (state.srcMode === 'mic' ? '麦克风' : '音频文件'));
+            // 加载 wasm 核心，把字节传给 worklet 自行编译实例化
+            // （AudioWorklet 的 MessagePort 传 WebAssembly.Module 在部分 Chrome 版本不可靠）
+            try {
+                const resp = await fetch('pghi_shifter.wasm');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const bytes = await resp.arrayBuffer();
+                state.worklet.port.postMessage({ type: 'wasm', bytes });
+            } catch (err) {
+                setStatus(false, 'wasm 加载失败：' + err.message);
+            }
         }
 
         function applyParams() {
@@ -280,6 +331,18 @@
 
         // 窗长 / FFT 大小显示（与 worklet 的 WINDOW_DEFS 保持一致）
         const WIN_OVERLAP = { 'hann': 4, 'blackman-harris-3term': 6, 'blackman-harris': 8 };
+
+        // HOP 范围：128 ~ 1024，步长 64
+        function buildHopOptions() {
+            const sel = document.getElementById('hopSel');
+            for (let hop = 128; hop <= 1024; hop += 64) {
+                const opt = document.createElement('option');
+                opt.value = String(hop);
+                opt.textContent = String(hop);
+                if (hop === state.params.hop) opt.selected = true;
+                sel.appendChild(opt);
+            }
+        }
 
         function updateWindowInfo() {
             const hop = state.params.hop;
@@ -527,6 +590,14 @@
                 applyParams();
             });
 
+            const cooldownRange = document.getElementById('cooldownRange');
+            cooldownRange.addEventListener('input', () => {
+                state.params.cooldownMs = parseInt(cooldownRange.value, 10);
+                document.getElementById('cooldownVal').textContent =
+                    state.params.cooldownMs === 0 ? '0 ms（无冷却）' : state.params.cooldownMs + ' ms';
+                applyParams();
+            });
+
             document.getElementById('volRange').addEventListener('input', (e) => {
                 state.params.vol = parseInt(e.target.value, 10) / 100;
                 if (state.master) state.master.gain.value = state.params.vol;
@@ -549,6 +620,7 @@
         }
 
         bindControls();
+        buildHopOptions();
         updateWindowInfo();
         draw();
     </script>
