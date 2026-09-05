@@ -2,7 +2,7 @@
 //
 // 从 qwqdsp/playing/playing.cpp 的 RealtimePitchShifter 移植，
 // 并带上浏览器版的新特性：HOP/窗函数运行时参数化、统一冷却时间（毫秒）、
-// 5 种瞬态检测、900 列波形包络显示。
+// 3 种瞬态检测（None / SuperFlux / DSPark）、900 列波形包络显示。
 //
 // 编译（clang wasm32，无需 emscripten / libc）：
 //   clang --target=wasm32 -O3 -std=c++17 -nostdlib -fno-exceptions -fno-rtti \
@@ -208,9 +208,9 @@ constexpr size_t kMaxBins = kMaxFft / 2 + 1;                   // 8193
 constexpr size_t kSynthesisRing = kMaxFft * 16;                // 262144
 constexpr size_t kHeapCapacity = kMaxBins * 2;
 constexpr size_t kMaxSuperFluxWeights = kMaxBins * 3;
-constexpr size_t kFluxHistorySize = 32;
 constexpr size_t kMaxSuperFluxBands = 256;
-constexpr size_t kDsFluxWindow = 12;
+constexpr size_t kDsFluxWindow = 32;                    // DSPark 历史缓冲上限（帧）
+constexpr size_t kDsFluxReferenceWindow = 12;           // DSPark 基准历史窗长（帧）
 constexpr float kDsFluxDelta = 0.02f;
 constexpr size_t kSincRadius = 8;
 constexpr size_t kSincTableSize = 2048;
@@ -369,7 +369,7 @@ public:
 
     float targetRatio = 1.0f;
     float currentRatio = 1.0f;
-    int transientMode = 4; // DSPark
+    int transientMode = 2; // DSPark
     bool firstFrame = true;
 
     // FFT
@@ -400,20 +400,6 @@ public:
     unsigned char heapIsPrev[kHeapCapacity];
     size_t heapSize = 0;
 
-    // Flux
-    float fluxHistory[kFluxHistorySize];
-    float fluxScratch[kFluxHistorySize];
-    size_t fluxHistoryCount = 0;
-    size_t fluxHistoryWrite = 0;
-    size_t fluxCooldown = 0;
-
-    // Vocoder
-    float transientMean = 0.0f;
-    float transientVariance = 0.0f;
-    size_t transientFrames = 0;
-    size_t transientCooldown = 0;
-    bool transientHasMean = false;
-
     // SuperFlux / DSPark 共用滤波器组
     uint32_t superfluxBandStarts[kMaxSuperFluxBands];
     uint32_t superfluxBandSizes[kMaxSuperFluxBands];
@@ -431,6 +417,7 @@ public:
     float dsfluxScratch[kDsFluxWindow];
     size_t dsfluxPos = 0;
     size_t dsfluxFilled = 0;
+    size_t dsfluxWindow = kDsFluxReferenceWindow;   // 当前历史窗长（帧），固定为基准值
     size_t dsfluxCooldown = 0;
 
     // sinc 重采样
@@ -604,15 +591,6 @@ public:
             previousSynthPhase[i] = 0.0f;
             previousMag[i] = 0.0f;
         }
-        for (size_t i = 0; i < kFluxHistorySize; ++i) { fluxHistory[i] = 0.0f; fluxScratch[i] = 0.0f; }
-        fluxHistoryCount = 0;
-        fluxHistoryWrite = 0;
-        fluxCooldown = 0;
-        transientMean = 0.0f;
-        transientVariance = 0.0f;
-        transientFrames = 0;
-        transientCooldown = 0;
-        transientHasMean = false;
         for (size_t i = 0; i < kMaxSuperFluxBands; ++i) {
             superfluxCurrent[i] = 0.0f;
             superfluxPreviousMax[i] = 0.0f;
@@ -622,6 +600,7 @@ public:
         for (size_t i = 0; i < kDsFluxWindow; ++i) { dsfluxHistory[i] = 0.0f; dsfluxScratch[i] = 0.0f; }
         dsfluxPos = 0;
         dsfluxFilled = 0;
+        dsfluxWindow = kDsFluxReferenceWindow;
         dsfluxCooldown = 0;
         superfluxCooldown = 0;
         firstFrame = true;
@@ -633,9 +612,18 @@ public:
         return f < 1 ? 1 : f;
     }
 
+    // 冷却帧数按分析 hop 计算（用于随 analysisHop 自适应缩放的瞬态检测器）。
+    // 高变调时 analysisHop 变小，用更小的 hop 换算才能得到相同的实际输入时间长度。
+    size_t cooldownFramesForHop(float ms, size_t analysisHop) const {
+        const float samples = ms * sampleRate / 1000.0f;
+        const size_t hop = analysisHop > 0 ? analysisHop : 1;
+        size_t frames = (size_t)(samples / (float)hop + 0.5f);
+        return frames < 1 ? 1 : frames;
+    }
+
     void setPitchShift(float semitones) {
-        if (semitones > 12.0f) semitones = 12.0f;
-        if (semitones < -12.0f) semitones = -12.0f;
+        if (semitones > 24.0f) semitones = 24.0f;
+        if (semitones < -24.0f) semitones = -24.0f;
         targetRatio = exp2f(semitones / 12.0f);
         if (firstFrame) currentRatio = targetRatio;
     }
@@ -719,10 +707,8 @@ public:
 
         bool resetPhase = firstFrame;
         if (!firstFrame) {
-            if (transientMode == 1) resetPhase = detectFluxTransient();
-            else if (transientMode == 2) resetPhase = detectSuperFluxTransient();
-            else if (transientMode == 3) resetPhase = detectVocoderTransient();
-            else if (transientMode == 4) resetPhase = detectDsParkTransient();
+            if (transientMode == 1) resetPhase = detectSuperFluxTransient();
+            else if (transientMode == 2) resetPhase = detectDsParkTransient(analysisHop);
         }
 
         if (resetPhase) {
@@ -844,37 +830,6 @@ public:
         }
     }
 
-    bool detectFluxTransient() {
-        float positiveDifference = 0.0f;
-        for (size_t bin = 0; bin < numBins; ++bin) {
-            const float d = currentMag[bin] - previousMag[bin];
-            if (d > 0.0f) positiveDifference += d;
-        }
-        const float flux = positiveDifference / (float)numBins;
-
-        float baseline = 0.0f;
-        if (fluxHistoryCount > 0) {
-            for (size_t i = 0; i < fluxHistoryCount; ++i) fluxScratch[i] = fluxHistory[i];
-            // 插入排序取中位数
-            for (size_t i = 1; i < fluxHistoryCount; ++i) {
-                const float v = fluxScratch[i];
-                size_t j = i;
-                while (j > 0 && fluxScratch[j - 1] > v) { fluxScratch[j] = fluxScratch[j - 1]; --j; }
-                fluxScratch[j] = v;
-            }
-            baseline = fluxScratch[fluxHistoryCount >> 1];
-        }
-        const bool transient = fluxCooldown == 0 && flux > (4.0f * baseline > 0.02f ? 4.0f * baseline : 0.02f);
-        fluxCooldown = transient ? cooldownFrames(cooldownMs)
-            : (fluxCooldown > 0 ? fluxCooldown - 1 : 0);
-        if (!transient) {
-            fluxHistory[fluxHistoryWrite] = flux;
-            fluxHistoryWrite = (fluxHistoryWrite + 1) % kFluxHistorySize;
-            fluxHistoryCount = fluxHistoryCount + 1 < kFluxHistorySize ? fluxHistoryCount + 1 : kFluxHistorySize;
-        }
-        return transient;
-    }
-
     bool detectSuperFluxTransient() {
         if (superfluxBandCount == 0) return false;
         float flux = 0.0f;
@@ -906,39 +861,7 @@ public:
         return transient;
     }
 
-    bool detectVocoderTransient() {
-        float flux = 0.0f;
-        float energy = 0.0f;
-        const float inv = 1.0f / (float)(numBins - 1);
-        for (size_t bin = 0; bin < numBins; ++bin) {
-            const float weight = 0.5f + 0.5f * (float)bin * inv;
-            const float currentLog = log1pf(currentMag[bin]);
-            const float d = currentLog - log1pf(previousMag[bin]);
-            if (d > 0.0f) flux += d;
-            energy += weight * currentLog;
-        }
-        const float normalizedFlux = flux / (energy > 1.0e-9f ? energy : 1.0e-9f);
-        const float deviation = sqrtf(transientVariance);
-        const bool transient = transientFrames > 4 && transientCooldown == 0
-            && normalizedFlux > transientMean + 1.5f * (0.07f > deviation ? 0.07f : deviation)
-            && normalizedFlux > transientMean * 1.35f;
-
-        const float alpha = transient ? 0.3f : 0.12f;
-        if (!transientHasMean) {
-            transientMean = normalizedFlux;
-            transientHasMean = true;
-        } else {
-            const float delta = normalizedFlux - transientMean;
-            transientMean += alpha * delta;
-            transientVariance = (1.0f - alpha) * (transientVariance + alpha * delta * delta);
-        }
-        transientCooldown = transient ? cooldownFrames(cooldownMs)
-            : (transientCooldown > 0 ? transientCooldown - 1 : 0);
-        ++transientFrames;
-        return transient;
-    }
-
-    bool detectDsParkTransient() {
+    bool detectDsParkTransient(size_t analysisHop) {
         if (superfluxBandCount == 0) return false;
         float flux = 0.0f;
         constexpr float kReferenceFrameSize = 2048.0f;
@@ -959,20 +882,27 @@ public:
         }
         flux /= (float)(bc > 1 ? bc : 1);
 
+        // 窗口固定为基准帧数（由 resetPhaseState 设为 kDsFluxReferenceWindow）。
+        // 高变调时 analysisHop 变小，但窗口不以帧数补齐——这里与已通过验证的本机
+        // 参考实现保持一致：历史窗长按帧计保持恒定，仅阈值与冷却按 analysisHop 缩放。
+        const size_t window = dsfluxWindow;
+
         bool rise = false;
-        if (dsfluxFilled >= kDsFluxWindow) {
-            for (size_t i = 0; i < kDsFluxWindow; ++i) dsfluxScratch[i] = dsfluxHistory[i];
-            for (size_t i = 1; i < kDsFluxWindow; ++i) {
+        if (dsfluxFilled >= window) {
+            for (size_t i = 0; i < window; ++i) dsfluxScratch[i] = dsfluxHistory[i];
+            for (size_t i = 1; i < window; ++i) {
                 const float v = dsfluxScratch[i];
                 size_t j = i;
                 while (j > 0 && dsfluxScratch[j - 1] > v) { dsfluxScratch[j] = dsfluxScratch[j - 1]; --j; }
                 dsfluxScratch[j] = v;
             }
-            rise = (flux - dsfluxScratch[kDsFluxWindow >> 1]) >= kDsFluxDelta;
+            // 阈值按分析 hop 缩放：变调时每帧频谱变化幅度改变，阈值需同步缩放
+            const float scaledDelta = kDsFluxDelta * (float)analysisHop / (float)hopSize;
+            rise = (flux - dsfluxScratch[window >> 1]) >= scaledDelta;
         }
         dsfluxHistory[dsfluxPos] = flux;
-        dsfluxPos = (dsfluxPos + 1) % kDsFluxWindow;
-        dsfluxFilled = dsfluxFilled + 1 < kDsFluxWindow ? dsfluxFilled + 1 : kDsFluxWindow;
+        dsfluxPos = (dsfluxPos + 1) % window;
+        dsfluxFilled = dsfluxFilled + 1 < window ? dsfluxFilled + 1 : window;
 
         for (size_t band = 0; band < bc; ++band) {
             float maximum = dsfluxCurrent[band];
@@ -981,7 +911,7 @@ public:
             dsfluxMaxPrev[band] = maximum;
         }
         const bool transient = dsfluxCooldown == 0 && !firstFrame && rise;
-        dsfluxCooldown = transient ? cooldownFrames(cooldownMs)
+        dsfluxCooldown = transient ? cooldownFramesForHop(cooldownMs, analysisHop)
             : (dsfluxCooldown > 0 ? dsfluxCooldown - 1 : 0);
         return transient;
     }
