@@ -982,7 +982,12 @@ public:
     }
 
     void recordTransientMark() {
-        marks[markCount % kMaxTransientMarks] = (double)inputPosition;
+        // 标记时间 = 瞬态检测窗中心的绝对输入位置。
+        // 检测器感知瞬态的时刻在检测窗中心（detWindowSize/2 处），而非主链帧触发时刻的
+        // inputPosition；若直接记 inputPosition，标记会随主链窗长偏移（窗越长滞后越多）。
+        int64_t markInput = (int64_t)inputPosition - (int64_t)windowSize + (int64_t)(detWindowSize >> 1) + 1;
+        if (markInput < 0) markInput = 0;
+        marks[markCount % kMaxTransientMarks] = (double)markInput;
         ++markCount;
     }
 };
