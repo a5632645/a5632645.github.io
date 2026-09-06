@@ -193,8 +193,7 @@
                     <span class="win-label">瞬态检测</span>
                     <div class="mode-btns" id="modeBtns">
                         <button class="win-btn" data-mode="0">None</button>
-                        <button class="win-btn" data-mode="1">SuperFlux</button>
-                        <button class="win-btn on" data-mode="2">DSPark</button>
+                        <button class="win-btn on" data-mode="1">DSPark</button>
                     </div>
                     <button class="win-btn" id="bypassBtn">BYPASS: OFF</button>
                 </div>
@@ -224,7 +223,7 @@
                 <b>算法</b>：PGHI（Phase Gradient Heap Integration）按幅度从大到小遍历 bin，
                 先由相位梯度预测相位（分析 hop 的相位增量按拉伸比映射），再把相邻 bin 相位梯度依次外推；
                 幅度/相位谱由 IFFT 合成为时域后，用预计算的 Blackman 窗 sinc 核插值重采样得到最终输出。
-                瞬态检测（SuperFlux / DSPark）检测到瞬态时直接重置合成相位，避免相位声码器对打击乐的拖尾模糊。
+                瞬态检测（DSPark）检测到瞬态时直接重置合成相位，避免相位声码器对打击乐的拖尾模糊。
                 DSP 核心由 C++ 编译为 WebAssembly（<code>pghi_shifter.wasm</code>），在 AudioWorklet 中运行，主线程仅负责加载与参数传递。
             </div>
         </div>
@@ -266,7 +265,7 @@
     <script>
         'use strict';
 
-        const MODE_NAMES = ['None', 'SuperFlux', 'DSPark'];
+        const MODE_NAMES = ['None', 'DSPark'];
         const state = {
             ctx: null,
             worklet: null,
@@ -279,7 +278,7 @@
             playing: false,
             startCtxTime: 0,
             displayInfo: null,
-            params: { pitch: 0, mode: 2, bypass: false, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
+            params: { pitch: 0, mode: 1, bypass: false, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
         };
 
         // ---------------- AudioContext / Worklet ----------------

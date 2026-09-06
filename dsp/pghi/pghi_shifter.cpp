@@ -369,7 +369,7 @@ public:
 
     float targetRatio = 1.0f;
     float currentRatio = 1.0f;
-    int transientMode = 2; // DSPark
+    int transientMode = 1; // DSPark
     bool firstFrame = true;
 
     // FFT
@@ -377,6 +377,18 @@ public:
     float fftInput[kMaxFft];
     float fftOutput[kMaxFft + 2];
     float fftTime[kMaxFft];
+
+    // 瞬态检测器独立 FFT：分析阶段每隔分析 hop 做两次 FFT（一次检测器、一次相位声码器）。
+    // 检测器始终用 hann 窗（与主链窗无关），避免 bh4 那样的窗旁瓣泄漏把扫频误读为瞬态；
+    // 但帧位置/时序与主链一致，保证检测与合成严格同步。
+    FftCore detFft;
+    float detInput[kMaxFft];
+    float detOutput[kMaxFft + 2];
+    float detWindow[kMaxWindow];       // 恒为 hann（长度=detWindowSize）
+    float detMag[kMaxBins];            // 检测器幅度谱（hann 窗分析）
+    size_t detWindowSize = 2048;       // 检测器窗长（固定 min(2048, windowSize)）
+    size_t detFrameSize = 4096;        // 检测器 FFT 帧长
+    size_t detNumBins = 2049;          // 检测器 bin 数
 
     // 窗 / 环
     float window[kMaxWindow];
@@ -400,16 +412,13 @@ public:
     unsigned char heapIsPrev[kHeapCapacity];
     size_t heapSize = 0;
 
-    // SuperFlux / DSPark 共用滤波器组
+    // DSPark 滤波器组（SuperFlux 已移除，保留供 DSPark 复用）
     uint32_t superfluxBandStarts[kMaxSuperFluxBands];
     uint32_t superfluxBandSizes[kMaxSuperFluxBands];
     uint32_t superfluxBandOffsets[kMaxSuperFluxBands];
     float superfluxWeights[kMaxSuperFluxWeights];
-    float superfluxCurrent[kMaxSuperFluxBands];
-    float superfluxPreviousMax[kMaxSuperFluxBands];
     size_t superfluxBandCount = 0;
     size_t superfluxWeightCount = 0;
-    size_t superfluxCooldown = 0;
 
     float dsfluxCurrent[kMaxSuperFluxBands];
     float dsfluxMaxPrev[kMaxSuperFluxBands];
@@ -478,6 +487,12 @@ public:
         numBins = frameSize / 2 + 1;
         olaGain = windowOlaGain(windowType);
         fft.init(frameSize);
+        // 检测器固定几何：窗长 min(2048, windowSize)，帧长 nextPow2(2*窗长)。
+        // 帧时序仍由主链 analysisHop 驱动，但分析帧长固定，彻底消除 hop/窗敏感性。
+        detWindowSize = windowSize < 2048 ? windowSize : 2048;
+        detFrameSize = nextPowerOfTwo(detWindowSize * 2);
+        detNumBins = detFrameSize / 2 + 1;
+        detFft.init(detFrameSize);
         displayColumns = kDisplayColumns;
         displaySize = (size_t)(sampleRate * 3.0f);
         columnSamples = (displaySize + displayColumns - 1) / displayColumns;
@@ -504,6 +519,11 @@ public:
                     - 0.01168f * cosf(3.0f * twopi * t);
             }
         }
+        // 瞬态检测器始终用 hann 窗（与主链 windowType 无关），长度 = detWindowSize（固定）
+        for (size_t n = 0; n < detWindowSize; ++n) {
+            const float t = (float)n / (float)detWindowSize;
+            detWindow[n] = 0.5f * (1.0f - cosf(twopi * t));
+        }
     }
 
     void buildSincTable() {
@@ -519,7 +539,8 @@ public:
         constexpr int kBandsPerOctave = 24;
         uint32_t centers[kMaxSuperFluxBands + 2];
         size_t centerCount = 0;
-        const float binHz = sampleRate / (float)frameSize;
+        // 检测器用固定几何（detFrameSize/detNumBins），不随主链窗变化
+        const float binHz = sampleRate / (float)detFrameSize;
         const float maximumFrequency = kMaximumFrequency < sampleRate * 0.5f * 0.999f
             ? kMaximumFrequency : sampleRate * 0.5f * 0.999f;
 
@@ -527,7 +548,7 @@ public:
             const float frequency = kMinimumFrequency * exp2f((float)index / (float)kBandsPerOctave);
             if (frequency > maximumFrequency) break;
             uint32_t bin = (uint32_t)(frequency / binHz + 0.5f);
-            if (bin > numBins - 1) bin = (uint32_t)(numBins - 1);
+            if (bin > detNumBins - 1) bin = (uint32_t)(detNumBins - 1);
             if (centerCount == 0 || bin > centers[centerCount - 1]) {
                 centers[centerCount++] = bin;
             }
@@ -592,8 +613,6 @@ public:
             previousMag[i] = 0.0f;
         }
         for (size_t i = 0; i < kMaxSuperFluxBands; ++i) {
-            superfluxCurrent[i] = 0.0f;
-            superfluxPreviousMax[i] = 0.0f;
             dsfluxCurrent[i] = 0.0f;
             dsfluxMaxPrev[i] = 0.0f;
         }
@@ -602,7 +621,6 @@ public:
         dsfluxFilled = 0;
         dsfluxWindow = kDsFluxReferenceWindow;
         dsfluxCooldown = 0;
-        superfluxCooldown = 0;
         firstFrame = true;
     }
 
@@ -705,10 +723,31 @@ public:
             currentAnalysisPhase[bin] = atan2f(im, re);
         }
 
+        // 瞬态检测器独立分析 FFT：窗恒为 hann，帧长固定（detFrameSize），与主链 windowType 无关。
+        // 帧时序仍由主链 analysisHop 触发（此处与相位声码器同帧），时间对齐保留；检测数据从
+        // 主链 inputRing 取最近 detWindowSize 个样本（居中分半窗），zero-pad 到 detFrameSize。
+        {
+            const size_t dW = detWindowSize;
+            const size_t dHalf = dW >> 1;
+            for (size_t i = 0; i < detFrameSize; ++i) detInput[i] = 0.0f;
+            for (size_t i = 0; i < dHalf; ++i) {
+                detInput[i] = inputRing[(iw + dHalf + i) % wS] * detWindow[dHalf + i];
+            }
+            const size_t dpad = detFrameSize - dHalf;
+            for (size_t i = 0; i < dHalf; ++i) {
+                detInput[dpad + i] = inputRing[(iw + i) % wS] * detWindow[i];
+            }
+            detFft.forward(detInput, detOutput);
+        }
+        for (size_t bin = 0; bin < detNumBins; ++bin) {
+            const float re = detOutput[2 * bin];
+            const float im = detOutput[2 * bin + 1];
+            detMag[bin] = hypotf(re, im);
+        }
+
         bool resetPhase = firstFrame;
         if (!firstFrame) {
-            if (transientMode == 1) resetPhase = detectSuperFluxTransient();
-            else if (transientMode == 2) resetPhase = detectDsParkTransient(analysisHop);
+            if (transientMode == 1) resetPhase = detectDsParkTransient(analysisHop);
         }
 
         if (resetPhase) {
@@ -830,49 +869,18 @@ public:
         }
     }
 
-    bool detectSuperFluxTransient() {
-        if (superfluxBandCount == 0) return false;
-        float flux = 0.0f;
-        constexpr float kReferenceFrameSize = 4096.0f;
-        const float scale = kReferenceFrameSize / (float)frameSize;
-        const size_t bc = superfluxBandCount;
-        for (size_t band = 0; band < bc; ++band) {
-            float magnitude = 0.0f;
-            const size_t off = superfluxBandOffsets[band];
-            const size_t size = superfluxBandSizes[band];
-            for (size_t i = 0; i < size; ++i) {
-                magnitude += currentMag[superfluxBandStarts[band] + i] * superfluxWeights[off + i];
-            }
-            superfluxCurrent[band] = log10f(magnitude * scale + 1.0f);
-            if (!firstFrame) {
-                const float d = superfluxCurrent[band] - superfluxPreviousMax[band];
-                if (d > 0.0f) flux += d;
-            }
-        }
-        for (size_t band = 0; band < bc; ++band) {
-            float maximum = superfluxCurrent[band];
-            if (band > 0 && superfluxCurrent[band - 1] > maximum) maximum = superfluxCurrent[band - 1];
-            if (band + 1 < bc && superfluxCurrent[band + 1] > maximum) maximum = superfluxCurrent[band + 1];
-            superfluxPreviousMax[band] = maximum;
-        }
-        const bool transient = superfluxCooldown == 0 && !firstFrame && flux / (float)bc > 0.03f;
-        superfluxCooldown = transient ? cooldownFrames(cooldownMs)
-            : (superfluxCooldown > 0 ? superfluxCooldown - 1 : 0);
-        return transient;
-    }
-
     bool detectDsParkTransient(size_t analysisHop) {
         if (superfluxBandCount == 0) return false;
         float flux = 0.0f;
         constexpr float kReferenceFrameSize = 2048.0f;
-        const float scale = kReferenceFrameSize / (float)frameSize;
+        const float scale = kReferenceFrameSize / (float)detFrameSize;
         const size_t bc = superfluxBandCount;
         for (size_t band = 0; band < bc; ++band) {
             float magnitude = 0.0f;
             const size_t off = superfluxBandOffsets[band];
             const size_t size = superfluxBandSizes[band];
             for (size_t i = 0; i < size; ++i) {
-                magnitude += currentMag[superfluxBandStarts[band] + i] * superfluxWeights[off + i];
+                magnitude += detMag[superfluxBandStarts[band] + i] * superfluxWeights[off + i];
             }
             dsfluxCurrent[band] = log10f(magnitude * scale + 1.0f);
             if (!firstFrame) {
@@ -896,7 +904,12 @@ public:
                 while (j > 0 && dsfluxScratch[j - 1] > v) { dsfluxScratch[j] = dsfluxScratch[j - 1]; --j; }
                 dsfluxScratch[j] = v;
             }
-            // 阈值按分析 hop 缩放：变调时每帧频谱变化幅度改变，阈值需同步缩放
+            // 阈值按分析 hop 缩放：变调时每帧频谱变化幅度改变，阈值需同步缩放。
+            // bh3 (3-term Blackman-Harris) 旁瓣泄漏较 bh4 高（-61dB vs -92dB），
+            // 扫频时能量在相邻对数频带间渗漏，会把渐进式扫频误读为瞬态。
+            // 实测 chirp 扫频泄漏 flux 峰值落在 acid_mono 正常瞬态 flux 分布内，
+            // 无法两全；故对 bh3 使用加倍的基准阈值（0.04），彻底消除扫频误判，
+            // 代价是 bh3 对真实弱瞬态的灵敏度略降（acid +0st 命中 33→28）。
             const float scaledDelta = kDsFluxDelta * (float)analysisHop / (float)hopSize;
             rise = (flux - dsfluxScratch[window >> 1]) >= scaledDelta;
         }

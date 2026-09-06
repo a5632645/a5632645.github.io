@@ -22,7 +22,7 @@ class PghiProcessor extends AudioWorkletProcessor {
         this.inPtr = 0;
         this.outPtr = 0;
         this.pitch = 0.0;
-        this.mode = 2;        // DSPark
+        this.mode = 1;        // DSPark
         this.bypass = false;
         this.hop = 512;
         this.windowType = 'blackman-harris-3term';
