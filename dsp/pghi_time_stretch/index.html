@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>实时 PGHI 移调器（playing.cpp 移植）</title>
+    <title>实时 PGHI 时间拉伸器</title>
 
     <link rel="stylesheet" href="/main.css">
     <!-- code -->
@@ -79,12 +79,6 @@
             min-width: 60px;
         }
 
-        .src-radio {
-            font-size: 13px;
-            margin-right: 14px;
-            cursor: pointer;
-        }
-
         .status-dot {
             display: inline-block;
             width: 8px;
@@ -139,7 +133,7 @@
 <body>
     <div class="page-header">
         <button onclick="window.location.href='/index.html'">back</button>
-        <b>实时 PGHI 移调器（playing.cpp 移植）</b>
+        <b>实时 PGHI 时间拉伸器</b>
         <hr>
     </div>
 
@@ -150,30 +144,22 @@
                 <b>HOP 大小</b>与<b>窗函数类型</b>作为参数提供，窗长按 COLA 条件取 HOP 的
                 4 / 6 / 8 倍重叠：hann 用 ×4、三项 Blackman-Harris 用 ×6、标准四项 Blackman-Harris 用 ×8
                 （即窗长 = HOP × 重叠因子），FFT 大小 = 2 × 窗长取最近 2 的幂
-                （默认 HOP 512 / 三项 Blackman-Harris，即原 <code>playing.cpp</code> 配置）。切换 HOP 或窗函数会重建处理链并清空状态。
+                （默认 HOP 512 / 三项 Blackman-Harris）。切换 HOP 或窗函数会重建处理链并清空状态。
             </p>
             <p>
-                同源的<a href="../pghi_time_stretch/index.html">实时 PGHI 时间拉伸器</a>移除了重采样器与抗混叠滤波器，
-                只做时间拉伸（音高不变）。
+                与<a href="../pghi/index.html">实时 PGHI 移调器</a>同源：移除输出端重采样器与相位声码器中的
+                抗混叠滤波器，只做时间拉伸（音高不变）。音频输入仅支持上传文件。
             </p>
 
             <div class="win-panel">
                 <div class="win-title">AUDIO INPUT</div>
                 <div class="win-row">
-                    <label class="src-radio"><input type="radio" name="src" value="file" checked> 2. 播放音频文件</label>
-                    <label class="src-radio"><input type="radio" name="src" value="mic"> 1. 麦克风输入</label>
-                </div>
-                <div class="win-row" id="fileZone">
                     <input type="file" id="fileInput" accept="audio/*">
                     <button class="win-btn" id="playBtn">播放</button>
                     <button class="win-btn" id="pauseBtn">暂停</button>
                     <button class="win-btn" id="stopBtn">停止</button>
                     <label class="win-label"><input type="checkbox" id="loopChk" checked> 循环</label>
                     <span id="fileInfo">未加载文件</span>
-                </div>
-                <div class="win-row">
-                    <button class="win-btn" id="micBtn">开始麦克风监听</button>
-                    <span class="win-label" id="micHint">需要浏览器麦克风授权</span>
                 </div>
             </div>
 
@@ -189,9 +175,12 @@
                         <option value="blackman-harris">blackman-harris 4-term (×8)</option>
                     </select>
                     <span class="win-val" id="winInfo"></span>
-                    <span class="win-label">音高</span>
-                    <input class="win-range" type="range" id="pitchRange" min="-24" max="24" step="1" value="0">
-                    <span class="win-val" id="pitchVal">+0 st</span>
+                </div>
+                <div class="win-row">
+                    <span class="win-label">速度</span>
+                    <input class="win-range" type="range" id="speedRange" min="-2" max="2" step="0.01" value="0">
+                    <span class="win-val" id="speedVal">1.00x</span>
+                    <span class="win-label" style="color:#666666;">0.25x ~ 4x（对数，1.00x = 原速）</span>
                 </div>
                 <div class="win-row">
                     <span class="win-label">瞬态检测</span>
@@ -219,16 +208,18 @@
             <canvas id="wave" width="900" height="180"></canvas>
 
             <div class="pp-note">
-                <b>使用说明</b>：选择输入源后点击播放/监听即可。拖动音高、切换瞬态模式、HOP 与窗函数均实时生效
-                （HOP/窗函数切换会清空处理状态，需重新填满窗长采样）。音频文件在本地浏览器中解码，不会上传。
-                输出为单声道，与 C++ 版一致。
+                <b>使用说明</b>：选择音频文件后点击播放即可。拖动速度、切换瞬态模式、HOP 与窗函数均实时生效
+                （HOP/窗函数切换会清空处理状态）。速度 1.00x 为原速，小于 1 变慢变长，大于 1 变快变短，音高始终不变。
+                音频文件在本地浏览器中解码，不会上传。输出为单声道。
             </div>
             <div class="pp-note">
                 <b>算法</b>：PGHI（Phase Gradient Heap Integration）按幅度从大到小遍历 bin，
                 先由相位梯度预测相位（分析 hop 的相位增量按拉伸比映射），再把相邻 bin 相位梯度依次外推；
-                幅度/相位谱由 IFFT 合成为时域后，用预计算的 Blackman 窗 sinc 核插值重采样得到最终输出。
+                合成 hop 固定为 HOP，分析 hop = HOP × 速度（直接按整数源位置取窗，无重采样），
+                因此输出时长 = 源时长 / 速度而音高不变。幅度/相位谱由 IFFT 合成为时域后直接 OLA 叠加。
                 瞬态检测（DSPark）检测到瞬态时直接重置合成相位，避免相位声码器对打击乐的拖尾模糊。
-                DSP 核心由 C++ 编译为 WebAssembly（<code>pghi_shifter.wasm</code>），在 AudioWorklet 中运行，主线程仅负责加载与参数传递。
+                DSP 核心由 C++ 编译为 WebAssembly（<code>pghi_time_stretch.wasm</code>），在 AudioWorklet 中运行，
+                主线程仅负责加载、上传样本与参数传递。
             </div>
         </div>
     </section>
@@ -274,15 +265,17 @@
             ctx: null,
             worklet: null,
             master: null,
-            micStream: null,
-            micSource: null,
-            fileSource: null,
             fileBuffer: null,
-            srcMode: 'file',
+            sourceName: '',
             playing: false,
-            startCtxTime: 0,
             displayInfo: null,
-            params: { pitch: 0, mode: 1, bypass: false, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
+            sourceCapacity: 0,
+            wasmReady: null,          // Promise，wasm 实例化完成时 resolve
+            wasmReadyResolve: null,
+            wasmReadyReject: null,
+            // 速度滑块为对数映射：value ∈ [-2,2] → speed = 2^value ∈ [0.25,4]
+            // loop 放进 params 以便启动时也能同步（复选框默认勾选，不会触发 change）
+            params: { speed: 1.0, mode: 1, bypass: false, loop: true, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
         };
 
         // ---------------- AudioContext / Worklet ----------------
@@ -290,8 +283,12 @@
         async function ensureAudio() {
             if (state.ctx) return;
             state.ctx = new AudioContext();
-            await state.ctx.audioWorklet.addModule('pghi_worklet.js');
-            state.worklet = new AudioWorkletNode(state.ctx, 'pghi-processor', { outputChannelCount: [1] });
+            state.wasmReady = new Promise((resolve, reject) => {
+                state.wasmReadyResolve = resolve;
+                state.wasmReadyReject = reject;
+            });
+            await state.ctx.audioWorklet.addModule('time_stretch_worklet.js');
+            state.worklet = new AudioWorkletNode(state.ctx, 'time-stretch-processor', { outputChannelCount: [1] });
             state.master = state.ctx.createGain();
             state.master.gain.value = state.params.vol;
             state.worklet.connect(state.master);
@@ -301,17 +298,25 @@
                 if (!d) return;
                 if (d.type === 'display') {
                     state.displayInfo = d;
+                    state.playing = d.playing;
+                    updateTransportUI();
                 } else if (d.type === 'wasm-ready') {
+                    state.sourceCapacity = d.sourceCapacity;
                     applyParams();
-                    setStatus(true, 'AUDIO ONLINE — 输入源：' + (state.srcMode === 'mic' ? '麦克风' : '音频文件'));
+                    setStatus(true, 'AUDIO ONLINE — 输入源：音频文件');
+                    if (state.wasmReadyResolve) state.wasmReadyResolve();
                 } else if (d.type === 'wasm-error') {
                     setStatus(false, 'wasm 初始化失败：' + d.message);
+                    if (state.wasmReadyReject) state.wasmReadyReject(new Error(d.message));
+                } else if (d.type === 'state') {
+                    state.playing = d.playing;
+                    updateTransportUI();
                 }
             };
             // 加载 wasm 核心，把字节传给 worklet 自行编译实例化
             // （AudioWorklet 的 MessagePort 传 WebAssembly.Module 在部分 Chrome 版本不可靠）
             try {
-                const resp = await fetch('pghi_shifter.wasm');
+                const resp = await fetch('pghi_time_stretch.wasm');
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const bytes = await resp.arrayBuffer();
                 state.worklet.port.postMessage({ type: 'wasm', bytes });
@@ -354,84 +359,89 @@
                 '窗长 ' + winLen + ' / FFT ' + fft;
         }
 
-        // ---------------- 输入源 ----------------
+        // 速度滑块：对数映射，value ∈ [-2,2] → speed = 2^value
+        function sliderToSpeed(v) { return Math.pow(2, v); }
+        function speedToSlider(s) { return Math.log2(s); }
 
-        function stopSource() {
-            if (state.fileSource) {
-                try { state.fileSource.stop(); } catch (e) { /* 已结束 */ }
-                state.fileSource.onended = null;
-                state.fileSource = null;
-            }
-            if (state.micSource) {
-                state.micSource.disconnect();
-                state.micSource = null;
-            }
-            if (state.micStream) {
-                state.micStream.getTracks().forEach(t => t.stop());
-                state.micStream = null;
-            }
-            state.playing = false;
-            state.startCtxTime = 0;
+        function updateSpeedLabel() {
+            document.getElementById('speedVal').textContent =
+                state.params.speed.toFixed(2) + 'x';
         }
 
-        async function startMic() {
-            await ensureAudio();
-            await state.ctx.resume();
-            stopSource();
-            state.srcMode = 'mic';
-            document.querySelector('input[name=src][value=mic]').checked = true;
-            try {
-                state.micStream = await navigator.mediaDevices.getUserMedia({
-                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-                });
-                state.micSource = state.ctx.createMediaStreamSource(state.micStream);
-                state.micSource.connect(state.worklet);
-                state.playing = true;
-                setStatus(true, 'AUDIO ONLINE — 麦克风监听中');
-            } catch (err) {
-                setStatus(false, '麦克风访问失败：' + err.message);
-            }
-            updateFileZone();
-        }
+        // ---------------- 文件加载 / 传输 ----------------
 
         async function loadFile(file) {
             try {
                 await ensureAudio();
+                await state.wasmReady;   // 等 wasm 实例化，sourceCapacity 才有效
                 const buf = await file.arrayBuffer();
-                state.fileBuffer = await state.ctx.decodeAudioData(buf);
+                const decoded = await state.ctx.decodeAudioData(buf);
+                state.fileBuffer = decoded;
+                state.sourceName = file.name;
+
+                // 下混为单声道（与移调器输出单声道一致）
+                const ch = decoded.numberOfChannels;
+                const n = decoded.length;
+                const mono = new Float32Array(n);
+                for (let c = 0; c < ch; ++c) {
+                    const d = decoded.getChannelData(c);
+                    for (let i = 0; i < n; ++i) mono[i] += d[i];
+                }
+                if (ch > 1) for (let i = 0; i < n; ++i) mono[i] /= ch;
+
+                if (n > state.sourceCapacity) {
+                    setStatus(false, '文件过长：' + (n / decoded.sampleRate).toFixed(1) + ' s，'
+                        + '上限约 ' + (state.sourceCapacity / state.ctx.sampleRate).toFixed(0) + ' s');
+                    return;
+                }
+                // 拷贝到独立的 ArrayBuffer 再 transfer，避免主线程与 worklet 争用
+                const copy = mono.slice();
+                state.worklet.port.postMessage(
+                    { type: 'source', data: copy, length: n }, [copy.buffer]);
+
                 document.getElementById('fileInfo').textContent =
-                    file.name + '（' + state.fileBuffer.duration.toFixed(1) + ' s）';
-                playFile();
+                    file.name + '（' + decoded.duration.toFixed(1) + ' s，'
+                    + ch + ' 声道 → 单声道）';
+                setStatus(true, '已加载 — 点击播放');
+                updateTransportUI();
             } catch (err) {
                 setStatus(false, '文件加载失败：' + err.message);
             }
         }
 
-        function playFile() {
-            if (!state.ctx || !state.fileBuffer) {
-                setStatus(false, '请先选择音频文件');
+        function transport(action, value) {
+            if (!state.worklet) {
+                if (action === 'play') document.getElementById('fileInput').click();
                 return;
             }
-            state.srcMode = 'file';
-            document.querySelector('input[name=src][value=file]').checked = true;
-            stopSource();
-            state.ctx.resume();
-            const src = state.ctx.createBufferSource();
-            src.buffer = state.fileBuffer;
-            src.loop = document.getElementById('loopChk').checked;
-            src.connect(state.worklet);
-            src.start();
-            state.fileSource = src;
-            state.startCtxTime = state.ctx.currentTime;
-            state.playing = true;
-            state.fileSource.onended = () => { state.playing = false; updateFileZone(); };
-            updateFileZone();
+            if (action === 'play') state.ctx.resume();
+            state.worklet.port.postMessage({ type: 'transport', action: action, value: value });
         }
 
-        function updateFileZone() {
-            document.getElementById('playBtn').disabled = false;
-            document.getElementById('pauseBtn').textContent = state.ctx && state.ctx.state === 'suspended'
-                ? '继续' : '暂停';
+        function updateTransportUI() {
+            const info = state.displayInfo;
+            const playBtn = document.getElementById('playBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+            if (state.playing) {
+                playBtn.textContent = '播放';
+                playBtn.classList.remove('on');
+            } else if (state.fileBuffer) {
+                playBtn.textContent = '播放';
+            }
+            if (info && state.fileBuffer && state.ctx) {
+                // 进度：源位置 / 源长度；循环时源位置持续增长，取模显示
+                const dur = state.fileBuffer.duration;
+                let posSamples = info.position || 0;
+                const srcLen = info.sourceLength || 0;
+                if (state.params.loop && srcLen > 0) posSamples = posSamples % srcLen;
+                const pos = Math.min(dur, posSamples / state.ctx.sampleRate);
+                const fmt = (s) => {
+                    s = Math.max(0, Math.floor(s));
+                    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+                };
+                document.getElementById('fileInfo').textContent =
+                    state.sourceName + '  ' + fmt(pos) + ' / ' + fmt(dur);
+            }
         }
 
         // ---------------- 波形绘制 ----------------
@@ -462,10 +472,10 @@
 
             // 标题
             ctx.fillStyle = '#e8edf2';
-            ctx.fillText('INPUT WAVEFORM (3 s)', 12, 18);
+            ctx.fillText('SOURCE WAVEFORM (3 s)', 12, 18);
             ctx.fillStyle = info.mode === 0 ? '#7e848b' : '#e1ac4a';
             ctx.textAlign = 'right';
-            ctx.fillText(MODE_NAMES[info.mode], CW - 12, 18);
+            ctx.fillText(MODE_NAMES[info.mode] + '  ' + (info.speed || 1).toFixed(2) + 'x', CW - 12, 18);
             ctx.textAlign = 'left';
 
             // 中线
@@ -515,44 +525,28 @@
         // ---------------- 控件绑定 ----------------
 
         function bindControls() {
-            document.querySelectorAll('input[name=src]').forEach(r => {
-                r.addEventListener('change', async () => {
-                    if (r.value === state.srcMode) return;
-                    state.srcMode = r.value;
-                    stopSource();
-                    if (r.value === 'mic') {
-                        await startMic();
-                    } else if (state.fileBuffer) {
-                        playFile();
-                    }
-                });
-            });
-
-            document.getElementById('micBtn').addEventListener('click', startMic);
-
             document.getElementById('fileInput').addEventListener('change', (e) => {
                 if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
             });
-            document.getElementById('playBtn').addEventListener('click', () => {
-                if (state.fileBuffer) { playFile(); }
-                else { document.getElementById('fileInput').click(); }
+            document.getElementById('playBtn').addEventListener('click', async () => {
+                if (!state.fileBuffer) { document.getElementById('fileInput').click(); return; }
+                await ensureAudio();
+                await state.wasmReady;
+                await state.ctx.resume();
+                transport('play');
             });
-            document.getElementById('pauseBtn').addEventListener('click', async () => {
-                if (!state.ctx) return;
-                if (state.ctx.state === 'running') await state.ctx.suspend();
-                else await state.ctx.resume();
-                updateFileZone();
+            document.getElementById('pauseBtn').addEventListener('click', () => {
+                if (!state.worklet) return;
+                transport('pause');
             });
             document.getElementById('stopBtn').addEventListener('click', () => {
-                stopSource();
-                if (state.ctx && state.ctx.state === 'suspended') state.ctx.resume();
-                updateFileZone();
+                if (!state.worklet) return;
+                transport('stop');
             });
 
-            document.getElementById('loopChk').addEventListener('change', () => {
-                if (state.fileSource) {
-                    state.fileSource.loop = document.getElementById('loopChk').checked;
-                }
+            document.getElementById('loopChk').addEventListener('change', (e) => {
+                state.params.loop = e.target.checked;
+                applyParams();
             });
 
             document.getElementById('hopSel').addEventListener('change', (e) => {
@@ -566,11 +560,10 @@
                 updateWindowInfo();
             });
 
-            const pitchRange = document.getElementById('pitchRange');
-            pitchRange.addEventListener('input', () => {
-                state.params.pitch = parseInt(pitchRange.value, 10);
-                document.getElementById('pitchVal').textContent =
-                    (state.params.pitch > 0 ? '+' : '') + state.params.pitch + ' st';
+            const speedRange = document.getElementById('speedRange');
+            speedRange.addEventListener('input', () => {
+                state.params.speed = sliderToSpeed(parseFloat(speedRange.value));
+                updateSpeedLabel();
                 applyParams();
             });
 
@@ -604,25 +597,15 @@
                 if (state.master) state.master.gain.value = state.params.vol;
             });
 
-            // 文件播放进度
-            setInterval(() => {
-                if (state.srcMode === 'file' && state.fileSource && state.fileBuffer && state.ctx
-                    && state.ctx.state === 'running') {
-                    const dur = state.fileBuffer.duration;
-                    let pos = state.ctx.currentTime - state.startCtxTime;
-                    if (state.fileSource.loop) pos = pos % dur;
-                    const fmt = (s) => {
-                        s = Math.max(0, Math.floor(s));
-                        return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
-                    };
-                    document.getElementById('fileInfo').textContent = fmt(pos) + ' / ' + fmt(dur);
-                }
-            }, 250);
+            // 播放进度刷新
+            setInterval(updateTransportUI, 250);
         }
 
         bindControls();
         buildHopOptions();
         updateWindowInfo();
+        updateSpeedLabel();
+        updateTransportUI();
         draw();
     </script>
 </body>
