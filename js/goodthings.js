@@ -1,5 +1,9 @@
 const goodthings = [
   {
+    title: "Laurent de Soras个人网站",
+    href: "https://ldesoras.fr/index.html"
+  },
+  {
     title: "C++ memory order以及cpu真正结构",
     href: "https://zhuanlan.zhihu.com/p/682286231",
   },

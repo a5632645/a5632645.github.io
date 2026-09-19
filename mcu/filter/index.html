@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>滤波器与电源电路计算</title>
+    <title>滤波器、电源与放大器计算</title>
 
     <link rel="stylesheet" href="/main.css">
     <!-- math -->
@@ -54,7 +54,7 @@
 <body>
     <div class="page-header">
         <button onclick="window.location.href='/index.html'">back</button>
-        <b>滤波器与电源电路计算</b>
+        <b>滤波器、电源与放大器计算</b>
         <hr>
     </div>
 
@@ -150,10 +150,12 @@
         </div>
     </section>
 
-    <!-- 数据驱动的电源拓扑工具挂载点 -->
+    <!-- 数据驱动的电路计算工具挂载点 -->
     <div id="smps-root"></div>
+    <div id="amp-root"></div>
 
     <script src="/mcu/filter/smps.js"></script>
+    <script src="/mcu/filter/amp.js"></script>
 
     <script src="/main.js"></script>
 </body>

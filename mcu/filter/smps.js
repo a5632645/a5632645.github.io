@@ -19,6 +19,7 @@
             F: [{ v: 1, n: "F" }, { v: 1e-3, n: "mF" }, { v: 1e-6, n: "µF" }, { v: 1e-9, n: "nF" }, { v: 1e-12, n: "pF" }],
             A: [{ v: 1, n: "A" }, { v: 1e-3, n: "mA" }],
             V: [{ v: 1, n: "V" }, { v: 1e-3, n: "mV" }],
+            ohm: [{ v: 1e6, n: "MΩ" }, { v: 1e3, n: "kΩ" }, { v: 1, n: "Ω" }],
         };
 
         function fmtEng(x, units) {
@@ -37,8 +38,21 @@
             return (d * 100).toFixed(1) + "%";
         }
 
+        function fmtGain(x) {
+            if (!isFinite(x) || x <= 0) return "--";
+            return (x >= 100 ? x.toPrecision(4) : x.toPrecision(3)) + " ×";
+        }
+
+        function fmtDb(x) {
+            if (!isFinite(x)) return "--";
+            return x.toFixed(1) + " dB";
+        }
+
         function fmtVal(x, fmt) {
-            return fmt === "pct" ? fmtPct(x) : fmtEng(x, ENG[fmt]);
+            if (fmt === "pct") return fmtPct(x);
+            if (fmt === "x") return fmtGain(x);
+            if (fmt === "dB") return fmtDb(x);
+            return fmtEng(x, ENG[fmt]);
         }
 
         function readVal(id, idUnit) {
@@ -93,15 +107,18 @@
             outPara.textContent = fmtHz(1 / (PI2 * Math.sqrt(L * (C1 + C2))));
         }
 
-        /* ---------------- 数据驱动的电源拓扑 ---------------- */
+        /* ---------------- 数据驱动的电路工具（本文件：电源拓扑） ---------------- */
+        // 每个工具对象：{ id, title, desc, formula, note, inputs, rows, calc(vals) }
         // inputs:
-        //   { label, id, type:'unit'|'percent'|'plain', unit?, def, defUnit?, suffix?, min? }
-        //   type 'unit'  -> value + 单位下拉（引用 UNITS[unit]）
-        //   type 'percent' -> value + %/比例下拉（引用 UNITS.Pct）
-        //   type 'plain'  -> 仅数值（无单位），如 r、裕量系数
+        //   { label, id, type:'unit'|'percent'|'plain', unit?, def, defUnit?, suffix?, min?, optional? }
+        //   type 'unit'    -> 数值 + 单位下拉（引用 UNITS[unit]）
+        //   type 'percent' -> 数值 + %/比例下拉（引用 UNITS.Pct）
+        //   type 'plain'   -> 仅数值（无单位），如 r、裕量系数、目标增益
+        //   optional:true  -> 为空时不阻断整体计算（该输入相关的输出单独显示 --）
         // rows:
-        //   { label, key, fmt:'pct'|'H'|'F'|'A'|'V', margin:true/false }
-        //   margin:true 的行会额外渲染「裕量后」列（值 × 裕量系数）
+        //   { label, key, fmt:'pct'|'x'|'dB'|'H'|'F'|'A'|'V'|'ohm', margin?:true }
+        //   任一行 margin:true 时表格渲染「计算值 / 裕量后」三列，否则两列
+        // calc(vals) 返回 { key: 数值 }，缺项或 NaN 的行显示 --
         const SMPS = [
             {
                 id: "bt", title: "Boost 升压电路设计",
@@ -349,18 +366,29 @@
                 <select class="calc-unit" id="${id}-unit">${unitOptions(f.unit, f.defUnit)}</select></div>`;
         }
 
-        function rowHtml(c, r) {
-            const id = c.id + "-" + r.key;
-            const vCell = `<td><b id="${id}">--</b></td>`;
-            const mCell = r.margin ? `<td><b id="${id}-M">--</b></td>` : "<td>—</td>";
-            return `<tr><td>${r.label}</td>${vCell}${mCell}</tr>`;
+        // 只要有一个输出行声明 margin，该工具的表格就带「裕量后」列（三列）；否则两列
+        function hasMarginCol(c) {
+            return c.rows.some(r => r.margin);
         }
 
-        function buildSmpsSection(c) {
+        function rowHtml(c, r, withMargin) {
+            const id = c.id + "-" + r.key;
+            const vCell = `<td><b id="${id}">--</b></td>`;
+            let extra = "";
+            if (withMargin) {
+                extra = r.margin ? `<td><b id="${id}-M">--</b></td>` : "<td>—</td>";
+            }
+            return `<tr><td>${r.label}</td>${vCell}${extra}</tr>`;
+        }
+
+        function buildSection(c) {
             const s = document.createElement("section");
+            const withMargin = hasMarginCol(c);
             const inputsHtml = c.inputs.map(f => fieldHtml(c, f)).join("");
-            const header = `<tr><th>参数</th><th>计算值</th><th>裕量后</th></tr>`;
-            const rowsHtml = c.rows.map(r => rowHtml(c, r)).join("");
+            const header = withMargin
+                ? `<tr><th>参数</th><th>计算值</th><th>裕量后</th></tr>`
+                : `<tr><th>参数</th><th>数值</th></tr>`;
+            const rowsHtml = c.rows.map(r => rowHtml(c, r, withMargin)).join("");
             s.innerHTML = `
                 <h3 class="section-title">${c.title}</h3>
                 <div class="section_content">
@@ -380,26 +408,53 @@
             return f.type === "plain" ? readPlain(id) : readVal(id, id + "-unit");
         }
 
-        function runSmps(c) {
+        function runTool(c) {
             const vals = {};
             let ok = true;
             for (const f of c.inputs) {
                 vals[f.id] = readField(c, f);
-                if (!isFinite(vals[f.id])) ok = false;
+                if (!f.optional && !isFinite(vals[f.id])) ok = false;  // 可选输入（如目标增益）为空不阻断
             }
-            let margin = isFinite(vals.margin) ? vals.margin : 1;
+            const margin = isFinite(vals.margin) ? vals.margin : 1;
             const res = ok ? c.calc(vals) : null;
+            const withMargin = hasMarginCol(c);
             for (const r of c.rows) {
                 const el = document.getElementById(c.id + "-" + r.key);
-                const elM = r.margin ? document.getElementById(c.id + "-" + r.key + "-M") : null;
+                if (!el) continue;
+                const elM = (withMargin && r.margin) ? document.getElementById(c.id + "-" + r.key + "-M") : null;
                 if (!res) { el.textContent = "--"; if (elM) elM.textContent = "--"; continue; }
                 el.textContent = fmtVal(res[r.key], r.fmt);
                 if (elM) elM.textContent = fmtVal(res[r.key] * margin, r.fmt);
             }
         }
 
+        // 通用注册：把一个工具定义数组渲染进 rootId 容器，绑定输入并首次计算。
+        // 供本文件与其它模块（如 amp.js）复用。
+        function registerCircuits(defs, rootId) {
+            const root = document.getElementById(rootId);
+            if (!root) return;
+            for (const c of defs) {
+                root.appendChild(buildSection(c));
+                c.inputs.forEach(f => {
+                    const id = c.id + "-" + f.id;
+                    document.getElementById(id).addEventListener("input", () => runTool(c));
+                    document.getElementById(id).addEventListener("change", () => runTool(c));
+                    if (f.type !== "plain") {
+                        const u = document.getElementById(id + "-unit");
+                        u.addEventListener("input", () => runTool(c));
+                        u.addEventListener("change", () => runTool(c));
+                    }
+                });
+                runTool(c);
+            }
+            // 重新排版动态注入的公式
+            if (window.MathJax && MathJax.typesetPromise) {
+                MathJax.typesetPromise([root]);
+            }
+        }
+
         function init() {
-            // 滤波器
+            // 滤波器（手写）
             const filterBind = (ids, fn) => ids.forEach(id => {
                 const el = document.getElementById(id);
                 el.addEventListener("input", fn);
@@ -411,26 +466,7 @@
             calcCLC();
 
             // 电源拓扑（数据驱动）
-            const root = document.getElementById("smps-root");
-            for (const c of SMPS) {
-                root.appendChild(buildSmpsSection(c));
-                c.inputs.forEach(f => {
-                    const id = c.id + "-" + f.id;
-                    document.getElementById(id).addEventListener("input", () => runSmps(c));
-                    document.getElementById(id).addEventListener("change", () => runSmps(c));
-                    if (f.type !== "plain") {
-                        const u = document.getElementById(id + "-unit");
-                        u.addEventListener("input", () => runSmps(c));
-                        u.addEventListener("change", () => runSmps(c));
-                    }
-                });
-                runSmps(c);
-            }
-
-            // 重新排版动态注入的公式
-            if (window.MathJax && MathJax.typesetPromise) {
-                MathJax.typesetPromise([root]);
-            }
+            registerCircuits(SMPS, "smps-root");
         }
 
         init();
