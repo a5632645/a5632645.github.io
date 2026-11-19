@@ -13,12 +13,14 @@
     <!-- math -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
-<body>
+<body class="page">
     <div class="page-header">
         <button onclick="window.location.href='/index.html'">back</button>
         <b>单片机</b>
-        <hr>
     </div>
+    <div class="page-body">
+    <main class="page-content">
+
 
     <h3>RISC-V bootloader不能跳转app</h3>
     <div class="frame">
@@ -65,6 +67,9 @@ else {
     <div class="frame">
         <p>翻译: 胡言乱语</p>
         <p>一般是TX寄存器的长度比描述符里的端点maxpacket大导致的</p>
+    </div>
+
+    </main>
     </div>
 
     <script src="/main.js"></script>

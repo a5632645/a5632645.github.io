@@ -136,12 +136,14 @@
     </style>
 </head>
 
-<body>
+<body class="page">
     <div class="page-header">
         <button onclick="window.location.href='/index.html'">back</button>
         <b>实时 PGHI 移调器（playing.cpp 移植）</b>
-        <hr>
     </div>
+    <div class="page-body">
+    <main class="page-content">
+
 
     <section>
         <h3 class="section-title">交互式重现</h3>
@@ -625,6 +627,11 @@
         updateWindowInfo();
         draw();
     </script>
+    </main>
+    </div>
+
+<script src="/main.js"></script>
+
 </body>
 
 </html>

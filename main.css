@@ -15,6 +15,49 @@ body {
     color: #000000;
 }
 
+/* ============================================
+   Article Page Layout
+   Top: header (back button + title).
+   Bottom: catalog list on the left, article on
+   the right. The home page keeps the full-width
+   layout; every sub-page opts in with
+   <body class="page">.
+   ============================================ */
+:root {
+    --page-max-width: 1100px;
+    --catalog-width: 170px;
+    --catalog-gap: 8px;
+    --catalog-lane: calc(var(--catalog-width) + var(--catalog-gap));
+    --page-header-height: 52px;
+}
+
+body.page {
+    max-width: var(--page-max-width);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Set by main.js on pages that have a catalog. The extra
+   width is the lane occupied by the left-hand list. */
+body.page.has-catalog {
+    max-width: calc(var(--page-max-width) + var(--catalog-lane));
+}
+
+.page-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+}
+
+body.page.has-catalog .page-body {
+    grid-template-columns: var(--catalog-width) minmax(0, 1fr);
+    column-gap: var(--catalog-gap);
+}
+
+.page-content {
+    min-width: 0;
+}
+
 .no_warp {
     display: inline-block;
 }
@@ -111,11 +154,14 @@ section {
     background-color: #c0c0c0;
     margin: 6px 2px 8px 2px;
     padding: 0;
+    /* Keep the section title clear of the sticky header
+       when a catalog link scrolls to it. */
+    scroll-margin-top: calc(var(--page-header-height) + 8px);
 }
 
 /* ============================================
    Page Header — Sticky top bar (back + title)
-   Stays above section-title when scrolling
+   Pinned while the article and catalog scroll
    ============================================ */
 .page-header {
     position: sticky;
@@ -127,12 +173,10 @@ section {
 
 /* ============================================
    Section Title — Windows Title Bar Style
-   Sticky, with classic gradient-like gray
+   Scrolls with the article; the catalog list
+   highlights the section currently in view.
    ============================================ */
 .section-title {
-    position: sticky;
-    top: 36px;
-
     margin: 0;
     padding: 4px 8px;
     font-size: 13px;
@@ -146,7 +190,6 @@ section {
         inset 1px 1px 0 #FFFFFF,
         inset -1px -1px 0 #000000;
 
-    z-index: 10;
     line-height: 1.4;
 }
 
@@ -255,57 +298,154 @@ button:active {
 }
 
 /* ============================================
-   Catalog (Table of Contents) — Windows Dialog Style
+   Catalog (Table of Contents) — Left List
+   Grid column left of the article; sticks below
+   the header and highlights the section in view.
    ============================================ */
-.catalog-button {
-    position: fixed;
-    top: 0;
-    right: 0;
-    z-index: 1000;
-    background-color: #c0c0c0;
-    padding: 6px 8px;
-    max-height: 100%;
+.catalog {
+    position: sticky;
+    top: calc(var(--page-header-height) + 8px);
+    z-index: 10;
+    width: var(--catalog-width);
+    max-height: calc(100vh - var(--page-header-height) - 24px);
     overflow-y: auto;
+    font-size: 13px;
 
     /* 3D raised border */
     border: 1px solid #808080;
     box-shadow:
         inset 1px 1px 0 #FFFFFF,
         inset -1px -1px 0 #000000;
-
-    font-size: 13px;
-    cursor: default;
+    background-color: #c0c0c0;
 }
 
 .catalog-label {
     display: block;
+    width: 100%;
+    margin: 0;
     padding: 4px 8px;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: left;
+    color: #ffffff;
+    background-color: #000060;
+
+    /* Same sunken 3D bevel as .section-title */
+    box-shadow:
+        inset 1px 1px 0 #FFFFFF,
+        inset -1px -1px 0 #000000;
+
+    border: none;
+    outline: none;
     cursor: default;
     user-select: none;
 }
 
+.catalog-label:hover,
+.catalog-label:active {
+    color: #ffffff;
+    background-color: #000060;
+    border: none;
+}
+
 .catalog-list {
-    display: none;
+    display: flex;
     flex-direction: column;
-    width: fit-content;
-    background-color: #c0c0c0;
-    padding: 10px 0 4px 0;
+    gap: 1px;
+    padding: 6px;
 }
 
 .catalog-list a {
     display: block;
-    padding: 3px 12px;
+    padding: 3px 6px;
     text-decoration: none;
     color: #000000;
+    line-height: 1.4;
+    word-break: break-word;
 }
 
 .catalog-list a:hover {
+    background-color: #d4d4d4;
+    color: #000080;
+}
+
+/* Current section — a different colour from the hover state. */
+.catalog-list a.active {
     background-color: #000080;
     color: #ffffff;
 }
 
-.catalog-button:hover .catalog-list {
-    display: flex;
+.catalog-list a.active:hover {
+    background-color: #000060;
+    color: #ffffff;
+}
+
+/* Small screens: no side column. The catalog goes back to
+   the original floating button at the top right; its list
+   opens on hover, keyboard focus or tap. */
+@media (max-width: 767px) {
+    body.page,
+    body.page.has-catalog {
+        max-width: var(--page-max-width);
+    }
+
+    .page-body,
+    body.page.has-catalog .page-body {
+        display: block;
+    }
+
+    /* Keep the floating button clear of the back button/title. */
+    body.page.has-catalog .page-header {
+        padding-right: 96px;
+    }
+
+    .catalog {
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: auto;
+        width: auto;
+        max-width: 76vw;
+        max-height: 100vh;
+        overflow-y: auto;
+        z-index: 1000;
+    }
+
+    /* Same footprint as the old floating button (about 82 x 39). */
+    .catalog-label {
+        padding: 11px 16px;
+        cursor: pointer;
+    }
+
+    /* Old floating button palette: gray label, black text,
+       no colour change on hover. */
+    .catalog-label,
+    .catalog-label:hover,
+    .catalog-label:active {
+        color: #000000;
+        background-color: #c0c0c0;
+    }
+
+    /* Extra gap above the first entry so a tap meant for the
+       label does not hit that entry (the old list used a 10px
+       top padding for this). */
+    .catalog:hover .catalog-label,
+    .catalog:focus-within .catalog-label,
+    .catalog.open .catalog-label {
+        margin-bottom: 10px;
+    }
+
+    .catalog-list {
+        display: none;
+        width: max-content;
+        max-width: 76vw;
+    }
+
+    .catalog:hover .catalog-list,
+    .catalog:focus-within .catalog-list,
+    .catalog.open .catalog-list {
+        display: flex;
+    }
 }
 
 /* ============================================

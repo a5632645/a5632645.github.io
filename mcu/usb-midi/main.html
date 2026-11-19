@@ -13,13 +13,15 @@
     <!-- math -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
-<body>
+<body class="page">
     <div class="page-header">
         <button onclick="window.location.href='/index.html'">back</button>
         <b>制作一个usb-midi转换器</b>
-        <hr>
 
     </div>
+    <div class="page-body">
+    <main class="page-content">
+
     <h3>mcu选型</h3>
     <div class="frame">
         <p>好吧，自从制作了usb-dac后，我开始喜欢WCH的单片机了（USB外设实在是简洁明了）</p>
@@ -100,6 +102,9 @@ inline static uint8_t IntRawRingBuffer_Get(sIntRawRingBuffer* rb, uint32_t idx) 
             <p>usb-tx有cable-no则没有这个问题</p>
         </div>
         <p>串口midi解析推荐<a href="https://github.com/TheKikGen/midiXparser">midixpraser</a>库</p>
+    </div>
+
+    </main>
     </div>
 
 </body>
