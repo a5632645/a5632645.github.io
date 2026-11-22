@@ -1,5 +1,10 @@
 const dspPages = [
   {
+    update_date: "2026-11-22",
+    title: "实时 pbshift 移调器",
+    href: "dsp/pbshift/index.html",
+  },
+  {
     update_date: "2026-9-8",
     title: "实时PGHI时间拉伸",
     href: "dsp/pghi_time_stretch/index.html",
