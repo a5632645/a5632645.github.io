@@ -7,26 +7,34 @@
  *   params:    音高 / 瞬态模式 / 统一冷却时间(ms) / HOP / 窗函数
  *   display:   每 8 个量子从 wasm 读取波形包络与瞬态标记发回主线程
  *
- * 窗类型映射：0=hann  1=blackman-harris 3-term  2=blackman-harris 4-term
  */
 
 'use strict';
 
-const WINDOW_INDEX = { 'hann': 0, 'blackman-harris-3term': 1, 'blackman-harris': 2 };
+const workletClock = globalThis.performance;
+const nowMs = typeof workletClock?.now === 'function' ? () => workletClock.now() : Date.now;
+const LOAD_REPORT_SECONDS = 0.5;
+
+const WINDOW_INDEX = {
+    hann: 0, 'blackman-harris-3term': 1, 'blackman-harris': 2,
+    gaussian: 3, 'gaussian-59db': 4, 'gaussian-79db': 5, 'gaussian-102db': 6,
+};
 
 class PghiProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
         this.wasm = null;
         this.mem = null;      // Float32Array 视图
-        this.inPtr = 0;
-        this.outPtr = 0;
+        this.inBase = [];
+        this.outBase = [];
         this.pitch = 0.0;
         this.mode = 1;        // DSPark
         this.bypass = false;
         this.hop = 512;
         this.windowType = 'blackman-harris-3term';
         this.quantum = 0;
+        this.loadFrames = 0;
+        this.loadElapsedMs = 0;
         this.port.onmessage = (ev) => this.onMessage(ev.data);
     }
 
@@ -48,6 +56,9 @@ class PghiProcessor extends AudioWorkletProcessor {
             this.mode = m.mode;
             ex.set_transient_mode(this.mode);
         }
+        if (typeof m.phaseIntegration === 'number') {
+            ex.set_phase_integration(m.phaseIntegration);
+        }
         if (typeof m.cooldownMs === 'number') {
             ex.set_cooldown_ms(m.cooldownMs);
         }
@@ -59,6 +70,7 @@ class PghiProcessor extends AudioWorkletProcessor {
                 this.hop = m.hop;
                 this.windowType = m.window;
                 ex.reinit(this.hop, WINDOW_INDEX[this.windowType]);
+                this.postGeometry();
             }
         } else if (m.reset) {
             ex.reset();
@@ -78,43 +90,66 @@ class PghiProcessor extends AudioWorkletProcessor {
         this.wasm = new WebAssembly.Instance(module, {});
         const ex = this.wasm.exports;
         this.mem = new Float32Array(ex.memory.buffer);
-        this.inPtr = ex.in_ptr();
-        this.outPtr = ex.out_ptr();
+        this.inBase = [ex.in_ptr() >> 2, ex.in_right_ptr() >> 2];
+        this.outBase = [ex.out_ptr() >> 2, ex.out_right_ptr() >> 2];
         ex.init(sampleRate, this.hop, WINDOW_INDEX[this.windowType]);
         ex.set_transient_mode(this.mode);
         ex.set_cooldown_ms(64);
+        this.postGeometry();
         this.port.postMessage({ type: 'wasm-ready' });
     }
 
+    postGeometry() {
+        const ex = this.wasm.exports;
+        this.port.postMessage({
+            type: 'geometry',
+            hop: ex.hop(),
+            window: this.windowType,
+            windowSize: ex.window_size(),
+            fftSize: ex.fft_size(),
+        });
+    }
+
     process(inputs, outputs) {
-        const output = outputs[0] && outputs[0][0];
-        if (!output) return true;
+        const output = outputs[0];
+        if (!output?.length) return true;
         if (!this.wasm) {
-            output.fill(0.0);
+            for (const channel of output) channel.fill(0);
             return true;
         }
-        const ex = this.wasm.exports;
-        const n = output.length;
-        const input = inputs[0] && inputs[0][0];
-
-        if (input) {
-            // 输入拷入 wasm（指针为字节偏移，Float32Array 索引 = 字节 >> 2）
-            for (let i = 0; i < n; ++i) this.mem[(this.inPtr >> 2) + i] = input[i];
-        } else {
-            for (let i = 0; i < n; ++i) this.mem[(this.inPtr >> 2) + i] = 0.0;
+        const startMs = nowMs();
+        const input = inputs[0];
+        const n = output[0].length;
+        for (let ch = 0; ch < 2; ++ch) {
+            const channel = input[ch] ?? input[0];
+            const base = this.inBase[ch];
+            if (channel) this.mem.set(channel, base);
+            else this.mem.fill(0, base, base + n);
         }
 
-        ex.process(n);
+        this.wasm.exports.process(n);
 
-        if (this.bypass && input) {
-            output.set(input);
-        } else {
-            const base = this.outPtr >> 2;
-            for (let i = 0; i < n; ++i) output[i] = this.mem[base + i];
+        for (let ch = 0; ch < output.length; ++ch) {
+            const channel = input[ch] ?? input[0];
+            if (this.bypass && channel) {
+                output[ch].set(channel);
+            } else {
+                const base = this.outBase[ch];
+                for (let i = 0; i < n; ++i) output[ch][i] = this.mem[base + i];
+            }
         }
 
         if ((++this.quantum & 7) === 0) {
             this.postDisplay();
+        }
+
+        this.loadElapsedMs += Math.max(0, nowMs() - startMs);
+        this.loadFrames += n;
+        if (this.loadFrames >= sampleRate * LOAD_REPORT_SECONDS) {
+            const budgetMs = this.loadFrames * 1000 / sampleRate;
+            this.port.postMessage({ type: 'audio-load', percent: 100 * this.loadElapsedMs / budgetMs });
+            this.loadElapsedMs = 0;
+            this.loadFrames = 0;
         }
         return true;
     }

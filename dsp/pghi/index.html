@@ -102,6 +102,25 @@
             background-color: #e1ac4a;
         }
 
+        .audio-status {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+        }
+
+        .audio-load {
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        #audioLoad.over-budget {
+            color: #a02020;
+            font-weight: bold;
+        }
+
         #fileInfo {
             font-family: Consolas, monospace;
             font-size: 12px;
@@ -115,13 +134,6 @@
             max-width: 900px;
             width: 100%;
             margin: 10px 0;
-        }
-
-        .pp-note {
-            color: #666666;
-            font-size: 12px;
-            margin-top: 10px;
-            max-width: 720px;
         }
 
         .mode-btns {
@@ -148,16 +160,15 @@
     <section>
         <h3 class="section-title">交互式重现</h3>
         <div class="section_content">
-            <p>
-                <b>HOP 大小</b>与<b>窗函数类型</b>作为参数提供，窗长按 COLA 条件取 HOP 的
-                4 / 6 / 8 倍重叠：hann 用 ×4、三项 Blackman-Harris 用 ×6、标准四项 Blackman-Harris 用 ×8
-                （即窗长 = HOP × 重叠因子），FFT 大小 = 2 × 窗长取最近 2 的幂
-                （默认 HOP 512 / 三项 Blackman-Harris，即原 <code>playing.cpp</code> 配置）。切换 HOP 或窗函数会重建处理链并清空状态。
-            </p>
-            <p>
-                同源的<a href="../pghi_time_stretch/index.html">实时 PGHI 时间拉伸器</a>移除了重采样器与抗混叠滤波器，
-                只做时间拉伸（音高不变）。
-            </p>
+            <div class="win-panel audio-status">
+                <span class="win-label">
+                    <span class="status-dot status-off" id="statusDot"></span>
+                    <span id="statusText">AUDIO OFFLINE — 需要 http/https 环境（AudioWorklet + wasm）</span>
+                </span>
+                <span class="win-val audio-load" title="最近约 0.5 秒内，PGHI AudioWorklet 处理耗时占可用音频时间的比例。">
+                    音频线程 CPU <span id="audioLoad">—</span>
+                </span>
+            </div>
 
             <div class="win-panel">
                 <div class="win-title">AUDIO INPUT</div>
@@ -189,6 +200,12 @@
                         <option value="hann">hann (×4)</option>
                         <option value="blackman-harris-3term" selected>blackman-harris 3-term (×6)</option>
                         <option value="blackman-harris">blackman-harris 4-term (×8)</option>
+                        <optgroup label="Gaussian 峰值旁瓣">
+                            <option value="gaussian-59db">Gaussian −59 dB (×5)</option>
+                            <option value="gaussian-79db">Gaussian −79 dB (×6)</option>
+                            <option value="gaussian-102db">Gaussian −102 dB (×7)</option>
+                            <option value="gaussian">Gaussian −128 dB (×8)</option>
+                        </optgroup>
                     </select>
                     <span class="win-val" id="winInfo"></span>
                     <span class="win-label">音高</span>
@@ -196,10 +213,17 @@
                     <span class="win-val" id="pitchVal">+0 st</span>
                 </div>
                 <div class="win-row">
+                    <label class="win-label" for="phaseSel">相位积分</label>
+                    <select class="win-select" id="phaseSel" title="二维联合积分使用短窗 Flux 定位起音，并增加两个合成 hop 的前瞻。">
+                        <option value="0" selected>PGHI</option>
+                        <option value="1">二维联合积分</option>
+                    </select>
                     <span class="win-label">瞬态检测</span>
                     <div class="mode-btns" id="modeBtns">
                         <button class="win-btn" data-mode="0">None</button>
                         <button class="win-btn on" data-mode="1">DSPark</button>
+                        <button class="win-btn" data-mode="2">短窗 Flux</button>
+                        <button class="win-btn" data-mode="3">局部相位校正</button>
                     </div>
                     <button class="win-btn" id="bypassBtn">BYPASS: OFF</button>
                 </div>
@@ -207,31 +231,12 @@
                     <span class="win-label">冷却时间</span>
                     <input class="win-range" type="range" id="cooldownRange" min="0" max="300" step="1" value="64">
                     <span class="win-val" id="cooldownVal">64 ms</span>
-                    <span class="win-label" style="color:#666666;">所有瞬态检测器统一使用（0 = 无冷却）</span>
                     <span class="win-label">输出音量</span>
                     <input class="win-range" type="range" id="volRange" min="0" max="150" step="5" value="100">
                 </div>
             </div>
 
-            <div class="win-panel" style="display:flex; align-items:center; gap:8px; padding:6px 10px;">
-                <span class="status-dot status-off" id="statusDot"></span>
-                <span class="win-label" id="statusText">AUDIO OFFLINE — 需要 http/https 环境（AudioWorklet + wasm）</span>
-            </div>
-
             <canvas id="wave" width="900" height="180"></canvas>
-
-            <div class="pp-note">
-                <b>使用说明</b>：选择输入源后点击播放/监听即可。拖动音高、切换瞬态模式、HOP 与窗函数均实时生效
-                （HOP/窗函数切换会清空处理状态，需重新填满窗长采样）。音频文件在本地浏览器中解码，不会上传。
-                输出为单声道，与 C++ 版一致。
-            </div>
-            <div class="pp-note">
-                <b>算法</b>：PGHI（Phase Gradient Heap Integration）按幅度从大到小遍历 bin，
-                先由相位梯度预测相位（分析 hop 的相位增量按拉伸比映射），再把相邻 bin 相位梯度依次外推；
-                幅度/相位谱由 IFFT 合成为时域后，用预计算的 Blackman 窗 sinc 核插值重采样得到最终输出。
-                瞬态检测（DSPark）检测到瞬态时直接重置合成相位，避免相位声码器对打击乐的拖尾模糊。
-                DSP 核心由 C++ 编译为 WebAssembly（<code>pghi_shifter.wasm</code>），在 AudioWorklet 中运行，主线程仅负责加载与参数传递。
-            </div>
         </div>
     </section>
 
@@ -271,7 +276,7 @@
     <script>
         'use strict';
 
-        const MODE_NAMES = ['None', 'DSPark'];
+        const MODE_NAMES = ['None', 'DSPark', '短窗 Flux', '局部相位校正'];
         const state = {
             ctx: null,
             worklet: null,
@@ -284,7 +289,8 @@
             playing: false,
             startCtxTime: 0,
             displayInfo: null,
-            params: { pitch: 0, mode: 1, bypass: false, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
+            geometry: null,
+            params: { pitch: 0, mode: 1, phaseIntegration: 0, bypass: false, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
         };
 
         // ---------------- AudioContext / Worklet ----------------
@@ -292,8 +298,13 @@
         async function ensureAudio() {
             if (state.ctx) return;
             state.ctx = new AudioContext();
-            await state.ctx.audioWorklet.addModule('pghi_worklet.js');
-            state.worklet = new AudioWorkletNode(state.ctx, 'pghi-processor', { outputChannelCount: [1] });
+            state.ctx.addEventListener('statechange', () => {
+                if (state.ctx.state !== 'running') updateAudioLoad();
+            });
+            await state.ctx.audioWorklet.addModule('pghi_worklet.js?v=6');
+            state.worklet = new AudioWorkletNode(state.ctx, 'pghi-processor', {
+                outputChannelCount: [2], channelCount: 2, channelCountMode: 'clamped-max'
+            });
             state.master = state.ctx.createGain();
             state.master.gain.value = state.params.vol;
             state.worklet.connect(state.master);
@@ -303,6 +314,11 @@
                 if (!d) return;
                 if (d.type === 'display') {
                     state.displayInfo = d;
+                } else if (d.type === 'geometry') {
+                    state.geometry = d;
+                    updateWindowInfo();
+                } else if (d.type === 'audio-load') {
+                    if (state.ctx.state === 'running') updateAudioLoad(d.percent);
                 } else if (d.type === 'wasm-ready') {
                     applyParams();
                     setStatus(true, 'AUDIO ONLINE — 输入源：' + (state.srcMode === 'mic' ? '麦克风' : '音频文件'));
@@ -313,7 +329,7 @@
             // 加载 wasm 核心，把字节传给 worklet 自行编译实例化
             // （AudioWorklet 的 MessagePort 传 WebAssembly.Module 在部分 Chrome 版本不可靠）
             try {
-                const resp = await fetch('pghi_shifter.wasm');
+                const resp = await fetch('pghi_shifter.wasm?v=14');
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const bytes = await resp.arrayBuffer();
                 state.worklet.port.postMessage({ type: 'wasm', bytes });
@@ -330,10 +346,20 @@
         function setStatus(online, text) {
             document.getElementById('statusDot').className = 'status-dot ' + (online ? 'status-on' : 'status-off');
             document.getElementById('statusText').textContent = text;
+            if (!online) updateAudioLoad();
         }
 
-        // 窗长 / FFT 大小显示（与 worklet 的 WINDOW_DEFS 保持一致）
-        const WIN_OVERLAP = { 'hann': 4, 'blackman-harris-3term': 6, 'blackman-harris': 8 };
+        function updateAudioLoad(percent) {
+            const load = document.getElementById('audioLoad');
+            load.textContent = Number.isFinite(percent) ? percent.toFixed(1) + '%' : '—';
+            load.classList.toggle('over-budget', percent >= 100);
+        }
+
+        // 音频引擎启动前先按所选设置显示计算值。
+        const WIN_OVERLAP = {
+            hann: 4, 'blackman-harris-3term': 6, 'blackman-harris': 8,
+            'gaussian-59db': 5, 'gaussian-79db': 6, 'gaussian-102db': 7, gaussian: 8,
+        };
 
         // HOP 范围：128 ~ 1024，步长 64
         function buildHopOptions() {
@@ -348,12 +374,12 @@
         }
 
         function updateWindowInfo() {
-            const hop = state.params.hop;
-            const winLen = hop * (WIN_OVERLAP[state.params.window] || 6);
-            let fft = 1;
-            while (fft < winLen * 2) fft <<= 1;
-            document.getElementById('winInfo').textContent =
-                '窗长 ' + winLen + ' / FFT ' + fft;
+            const { hop, window } = state.params;
+            const geometry = state.geometry;
+            const confirmed = geometry?.hop === hop && geometry.window === window;
+            const winLen = confirmed ? geometry.windowSize : hop * WIN_OVERLAP[window];
+            const fft = confirmed ? geometry.fftSize : 2 * winLen;
+            document.getElementById('winInfo').textContent = '窗长 ' + winLen + ' / FFT ' + fft;
         }
 
         // ---------------- 输入源 ----------------
@@ -566,6 +592,11 @@
                 state.params.window = e.target.value;
                 applyParams();
                 updateWindowInfo();
+            });
+
+            document.getElementById('phaseSel').addEventListener('change', (e) => {
+                state.params.phaseIntegration = Number(e.target.value);
+                applyParams();
             });
 
             const pitchRange = document.getElementById('pitchRange');
