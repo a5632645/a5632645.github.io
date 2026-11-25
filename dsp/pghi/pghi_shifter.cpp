@@ -4,22 +4,16 @@
 // 并带上浏览器版的新特性：HOP/窗函数运行时参数化、统一冷却时间（毫秒）、
 // DSPark 瞬态检测（可关闭）、双向 RTPGHI 相位积分、900 列波形包络显示。
 //
-// 编译（clang wasm32，无需 emscripten / libc）：
-//   clang++ --target=wasm32 -msimd128 -O3 -std=c++17 -nostdlib -fno-exceptions -fno-rtti \
-//     -Wl,--no-entry -Wl,--initial-memory=33554432 \
-//     -Wl,--export=init -Wl,--export=process ... \
-//     pghi_shifter.cpp -o pghi_shifter.wasm
+// 编译：pwsh -File dsp/pghi/build.ps1（clang wasm32，无需 emscripten / libc）
 //
 // 内存布局：固定最大容量（hop<=1024, overlap<=8, fft<=16384），固定 Mid/Side 实例，
 // 无动态分配，memory 不增长，JS 端视图地址稳定。
 
+#include <stddef.h>
+#include <stdint.h>
 #include <wasm_simd128.h>
 
-// 完全 freestanding（无 libc/libc++/标准头），wasm32 下 size_t 为 32 位
-using size_t = unsigned int;
-using uint32_t = unsigned int;
-using uint64_t = unsigned long long;
-using int64_t = long long;
+#include "vendor/pffft/pffft.h"
 
 // ============================================================
 // 最小 float libm（wasm 无 libm；sqrt/floor/ceil/trunc/fabs 由
@@ -211,6 +205,32 @@ float hypotf(float x, float y) {
 
 } // extern "C"
 
+// Four bounded synthesis phases, reduced to [-pi/4, pi/4].
+static void synthesisSinCos(v128_t angle, v128_t& sine, v128_t& cosine) {
+    const v128_t quadrant = wasm_f32x4_nearest(
+        wasm_f32x4_mul(angle, wasm_f32x4_splat(0.6366197723675814f)));
+    const v128_t high = wasm_f32x4_mul(quadrant, wasm_f32x4_splat(1.570796251296997f));
+    const v128_t low = wasm_f32x4_mul(quadrant, wasm_f32x4_splat(7.549789415861596e-8f));
+    const v128_t reduced = wasm_f32x4_sub(wasm_f32x4_sub(angle, high), low);
+    const v128_t square = wasm_f32x4_mul(reduced, reduced);
+    const auto evaluate = [square](const double* coefficients) {
+        v128_t value = wasm_f32x4_splat((float)coefficients[4]);
+        for (int i = 3; i >= 0; --i) {
+            value = wasm_f32x4_add(wasm_f32x4_splat((float)coefficients[i]),
+                wasm_f32x4_mul(square, value));
+        }
+        return value;
+    };
+    const v128_t s = wasm_f32x4_mul(reduced, evaluate(kSinPoly));
+    const v128_t c = evaluate(kCosPoly);
+    const v128_t q = wasm_i32x4_trunc_sat_f32x4(quadrant);
+    const v128_t odd = wasm_i32x4_shl(q, 31);
+    const v128_t swap = wasm_i32x4_shr(odd, 31);
+    const v128_t sineSign = wasm_i32x4_shl(wasm_v128_and(q, wasm_i32x4_splat(2)), 30);
+    sine = wasm_v128_xor(wasm_v128_bitselect(c, s, swap), sineSign);
+    cosine = wasm_v128_xor(wasm_v128_bitselect(s, c, swap), wasm_v128_xor(sineSign, odd));
+}
+
 // ============================================================
 // 固定容量实时 PGHI 移调器
 // ============================================================
@@ -220,8 +240,10 @@ namespace {
 constexpr size_t kMaxHop = 1024;
 constexpr size_t kMaxOverlap = 8;
 constexpr size_t kMaxWindow = kMaxHop * kMaxOverlap;           // 8192
-constexpr size_t kMaxFft = 16384;                              // nextPow2(8192*2)
+constexpr size_t kMaxFft = 2 * kMaxWindow;
 constexpr size_t kMaxBins = kMaxFft / 2 + 1;                   // 8193
+constexpr size_t kMaxDetectorFft = 2048;
+constexpr size_t kMaxDetectorBins = kMaxDetectorFft / 2 + 1;
 constexpr size_t kSynthesisRing = kMaxFft * 16;                // 262144
 constexpr size_t kHeapCapacity = kMaxBins * 2;
 constexpr size_t kMaxSuperFluxWeights = kMaxBins * 3;
@@ -237,6 +259,29 @@ constexpr size_t kInputResampleRing = 4 * kInputRadius;
 constexpr size_t kSincTableSize = 2048;
 constexpr size_t kMaxTransientMarks = 32;
 constexpr size_t kDisplayColumns = 900;
+
+constexpr size_t kPffftAlignment = 16;
+// Upstream allocates one setup object and N floats for a real plan.
+constexpr size_t kPffftSetupBytes = 256;
+unsigned char* g_pffftArena = nullptr;
+size_t g_pffftArenaCapacity = 0;
+size_t g_pffftArenaUsed = 0;
+
+} // namespace
+
+extern "C" void* pghi_pffft_allocate(size_t bytes) {
+    const size_t mask = kPffftAlignment - 1;
+    const size_t offset = (g_pffftArenaUsed + mask) & ~mask;
+    if (!g_pffftArena || offset > g_pffftArenaCapacity
+        || bytes > g_pffftArenaCapacity - offset) __builtin_trap();
+    g_pffftArenaUsed = offset + bytes;
+    return g_pffftArena + offset;
+}
+
+extern "C" void* pffft_aligned_malloc(size_t bytes) { return pghi_pffft_allocate(bytes); }
+extern "C" void pffft_aligned_free(void*) {}
+
+namespace {
 
 constexpr int kGaussianWindow = 3;
 constexpr int kGaussian59Window = 4;
@@ -272,37 +317,50 @@ float sincKernel(float x) {
     return sinf(px) / px * window;
 }
 
-size_t nextPowerOfTwo(size_t v) {
+constexpr size_t nextPowerOfTwo(size_t v) {
     size_t r = 1;
     while (r < v) r <<= 1;
     return r;
 }
 
 // ------------------------------------------------------------
-// 迭代基 2 实数 FFT（CCS 布局，与浏览器 JS 版一致；1/N 逆变换）
-// 用固定 16384 的 twiddle 表支持任意 2^n <= 16384
+// 实数 FFT（CCS 布局）。PFFFT 的逆变换归一化融合到合成窗中。
+// 保留混合基实现以支持 PFFFT 不支持的长度。
 // ------------------------------------------------------------
+template <size_t Capacity>
 class FftCore {
 public:
-    size_t n;
+    size_t n = 0;
+    PFFFT_Setup* plan = nullptr;
+    alignas(kPffftAlignment) unsigned char planArena[kPffftSetupBytes + Capacity * sizeof(float)];
     size_t radix2Size;
     size_t oddRadix;
-    uint32_t rev[kMaxFft];
-    float cosT[kMaxFft / 2];
-    float sinT[kMaxFft / 2];
-    float stageCos[kMaxFft / 2];
-    float stageSin[kMaxFft / 2];
-    float reBuf[kMaxFft];
-    float imBuf[kMaxFft];
-    float mixedRe[kMaxFft / 2];
-    float mixedIm[kMaxFft / 2];
-    float mixedCos[kMaxFft / 2];
-    float mixedSin[kMaxFft / 2];
-    float oddCos[kMaxFft / 2];
-    float oddSin[kMaxFft / 2];
+    uint32_t rev[Capacity / 2];
+    float cosT[Capacity / 2];
+    float sinT[Capacity / 2];
+    float stageCos[Capacity / 2];
+    float stageSin[Capacity / 2];
+    alignas(kPffftAlignment) float reBuf[Capacity]; // PFFFT requires N scratch floats.
+    float imBuf[Capacity / 2];
+    float mixedRe[Capacity / 2];
+    float mixedIm[Capacity / 2];
+    float mixedCos[Capacity / 2];
+    float mixedSin[Capacity / 2];
+    float oddCos[Capacity / 2];
+    float oddSin[Capacity / 2];
 
     void init(size_t fftSize) {
+        if (n == fftSize) return;
         n = fftSize;
+        plan = nullptr;
+        if (pffft_is_valid_size((int)n, PFFFT_REAL)) {
+            g_pffftArena = planArena;
+            g_pffftArenaCapacity = sizeof(planArena);
+            g_pffftArenaUsed = 0;
+            plan = pffft_new_setup((int)n, PFFFT_REAL);
+            g_pffftArena = nullptr;
+            if (plan) return;
+        }
         const size_t half = n / 2;
         radix2Size = half & (0u - half);
         oddRadix = half / radix2Size;
@@ -346,6 +404,15 @@ public:
     // 实数 FFT：将偶数和奇数采样打包成半长复数 FFT。
     void forward(const float* x, float* ccs, size_t binCount) {
         const size_t half = n >> 1;
+        if (plan) {
+            pffft_transform_ordered(plan, x, ccs, reBuf, PFFFT_FORWARD);
+            if (binCount > half) {
+                ccs[n] = ccs[1];
+                ccs[n + 1] = 0.0f;
+            }
+            ccs[1] = 0.0f;
+            return;
+        }
         for (size_t i = 0; i < half; ++i) {
             const size_t index = rev[i];
             reBuf[index] = x[2 * i];
@@ -372,7 +439,13 @@ public:
         }
     }
 
-    void inverse(const float* ccs, float* out) {
+    void inverse(float* ccs, float* out) {
+        if (plan) {
+            ccs[1] = ccs[n];
+            pffft_transform_ordered(plan, ccs, out, reBuf, PFFFT_BACKWARD);
+            ccs[1] = 0.0f;
+            return;
+        }
         const size_t half = n >> 1;
         reBuf[0] = 0.5f * (ccs[0] + ccs[n]);
         imBuf[0] = 0.5f * (ccs[0] - ccs[n]);
@@ -396,6 +469,8 @@ public:
         }
     }
 
+    float synthesisScale() const { return plan ? 1.0f / (float)n : 1.0f; }
+
     void transform(int sign) {
         for (size_t group = 0; group < oddRadix; ++group) {
             const size_t offset = group * radix2Size;
@@ -414,6 +489,10 @@ public:
         }
         for (size_t group = 0; group < oddRadix; ++group) {
             const size_t output = group * radix2Size;
+            if (radix2Size >= 4) {
+                combineOddRadix(output, group, sign);
+                continue;
+            }
             for (size_t k = 0; k < radix2Size; ++k) {
                 mixedRe[output + k] = reBuf[k];
                 mixedIm[output + k] = imBuf[k];
@@ -435,6 +514,27 @@ public:
         for (size_t i = 0; i < half; ++i) {
             reBuf[i] = mixedRe[i];
             imBuf[i] = mixedIm[i];
+        }
+    }
+
+    void combineOddRadix(size_t output, size_t group, int sign) {
+        for (size_t k = 0; k < radix2Size; k += 4) {
+            v128_t real = wasm_v128_load(reBuf + k);
+            v128_t imag = wasm_v128_load(imBuf + k);
+            size_t root = group;
+            for (size_t sub = 1; sub < oddRadix; ++sub) {
+                const size_t input = sub * radix2Size + k;
+                const v128_t c = wasm_f32x4_splat(oddCos[root]);
+                const v128_t s = wasm_f32x4_splat(sign > 0 ? oddSin[root] : -oddSin[root]);
+                const v128_t re = wasm_v128_load(reBuf + input);
+                const v128_t im = wasm_v128_load(imBuf + input);
+                real = wasm_f32x4_add(real, wasm_f32x4_sub(wasm_f32x4_mul(re, c), wasm_f32x4_mul(im, s)));
+                imag = wasm_f32x4_add(imag, wasm_f32x4_add(wasm_f32x4_mul(re, s), wasm_f32x4_mul(im, c)));
+                root += group;
+                if (root >= oddRadix) root -= oddRadix;
+            }
+            wasm_v128_store(mixedRe + output + k, real);
+            wasm_v128_store(mixedIm + output + k, imag);
         }
     }
 
@@ -709,17 +809,23 @@ public:
     size_t overlap = 6;
     size_t windowSize = 3072;
     size_t halfWindow = 1536;
-    size_t frameSize = 6144;
-    size_t numBins = 3073;
+    size_t frameSize = nextPowerOfTwo(2 * windowSize);
+    size_t numBins = frameSize / 2 + 1;
     size_t outputStart = 3584;
     float cooldownMs = 64.0f;
 
     float targetRatio = 1.0f;
     float currentRatio = 1.0f;
+    float inputResampleStep = 1.0f;
+    float outputResampleStep = 1.0f;
+    float outputResampleCutoff = 1.0f;
 
-    float inputResampleStep() const {
+    void setCurrentRatio(float ratio) {
+        currentRatio = ratio;
         // 升调保留原始分析时基，降调在输入和输出两端分摊。
-        return currentRatio < 1.0f ? sqrtf(currentRatio) : 1.0f;
+        inputResampleStep = ratio < 1.0f ? sqrtf(ratio) : 1.0f;
+        outputResampleStep = ratio / inputResampleStep;
+        outputResampleCutoff = outputResampleStep > 1.0f ? 1.0f / outputResampleStep : 1.0f;
     }
     bool transientDetection = true;
     bool firstFrame = true;
@@ -739,22 +845,22 @@ public:
     bool transientPeakBins[kMaxBins];
 
     // FFT
-    FftCore fft;
-    float fftInput[kMaxFft];
-    float fftOutput[kMaxFft + 2];
-    float fftTime[kMaxFft];
+    FftCore<kMaxFft> fft;
+    alignas(kPffftAlignment) float fftInput[kMaxFft];
+    alignas(kPffftAlignment) float fftOutput[kMaxFft + 2];
+    alignas(kPffftAlignment) float fftTime[kMaxFft];
 
     // 瞬态检测器独立 FFT：分析阶段每隔分析 hop 做两次 FFT（一次检测器、一次相位声码器）。
     // 检测器始终用 hann 窗（与主链窗无关），避免 bh4 那样的窗旁瓣泄漏把扫频误读为瞬态；
     // 但帧位置/时序与主链一致，保证检测与合成严格同步。
-    FftCore detFft;
-    float detInput[kMaxFft];
-    float detOutput[kMaxFft + 2];
-    float detWindow[kMaxWindow];       // 恒为 hann（长度=detWindowSize）
-    float detMag[kMaxBins];            // 检测器幅度谱（hann 窗分析）
-    size_t detWindowSize = 2048;       // 检测器窗长（固定 min(2048, windowSize)）
-    size_t detFrameSize = 2048;        // 检测器 FFT 帧长
-    size_t detNumBins = 1025;          // 检测器 bin 数
+    FftCore<kMaxDetectorFft> detFft;
+    alignas(kPffftAlignment) float detInput[kMaxDetectorFft];
+    alignas(kPffftAlignment) float detOutput[kMaxFft + 2];
+    float detWindow[kMaxDetectorFft];  // 恒为 hann（长度=detWindowSize）
+    float detMag[kMaxDetectorBins];    // 检测器幅度谱（hann 窗分析）
+    size_t detWindowSize = kMaxDetectorFft;
+    size_t detFrameSize = kMaxDetectorFft;
+    size_t detNumBins = kMaxDetectorBins;
 
     // 窗 / 环
     float window[kMaxWindow];
@@ -869,15 +975,15 @@ public:
         overlap = windowOverlap(windowType);
         windowSize = hopSize * overlap;
         halfWindow = windowSize >> 1;
-        // 分析窗均使用两倍长度的 FFT，保留原有的输出起点。
-        frameSize = 2 * windowSize;
+        // RTPGHI 群延迟积分需要至少两倍窗长的 FFT，避免瞬态回绕。
+        frameSize = nextPowerOfTwo(2 * windowSize);
         outputStart = (windowType == 1 ? nextPowerOfTwo(windowSize) : windowSize) - hopSize;
         numBins = frameSize / 2 + 1;
         jointShortSize = windowSize < kJointShortWindow ? windowSize : kJointShortWindow;
         fft.init(frameSize);
         // 检测器固定几何：窗与 FFT 长度均为 min(2048, windowSize)。
         // 帧时序仍由主链 analysisHop 驱动，但分析帧长固定，彻底消除 hop/窗敏感性。
-        detWindowSize = windowSize < 2048 ? windowSize : 2048;
+        detWindowSize = windowSize < kMaxDetectorFft ? windowSize : kMaxDetectorFft;
         detFrameSize = detWindowSize;
         detNumBins = detFrameSize / 2 + 1;
         detFft.init(detFrameSize);
@@ -925,7 +1031,7 @@ public:
             for (size_t n = offset; n < L; n += hopSize) {
                 sum += (double)window[n] * window[n];
             }
-            const float gain = (float)(1.0 / sum);
+            const float gain = (float)(1.0 / sum) * fft.synthesisScale();
             for (size_t n = offset; n < L; n += hopSize) {
                 synthesisWindow[n] = window[n] * gain;
             }
@@ -1024,7 +1130,7 @@ public:
         synthesisClearedUntil = 0;
         resamplePosition = 0.0;
         resamplerStarted = false;
-        currentRatio = targetRatio;
+        setCurrentRatio(targetRatio);
         inputPosition = 0;
 
         for (size_t i = 0; i < kDisplayColumns * 2; ++i) env[i] = 0.0f;
@@ -1067,7 +1173,7 @@ public:
     // 冷却帧数按分析 hop 计算（用于随 analysisHop 自适应缩放的瞬态检测器）。
     // 高变调时 analysisHop 变小，用更小的 hop 换算才能得到相同的实际输入时间长度。
     size_t cooldownFramesForHop(float ms, size_t analysisHop) const {
-        const float inputStep = inputResampleStep();
+        const float inputStep = inputResampleStep;
         const float samples = ms * sampleRate / (1000.0f * inputStep);
         const size_t hop = analysisHop > 0 ? analysisHop : 1;
         size_t frames = (size_t)(samples / (float)hop + 0.5f);
@@ -1078,7 +1184,7 @@ public:
         if (semitones > 24.0f) semitones = 24.0f;
         if (semitones < -24.0f) semitones = -24.0f;
         targetRatio = exp2f(semitones / 12.0f);
-        if (!analysisStarted) currentRatio = targetRatio;
+        if (!analysisStarted) setCurrentRatio(targetRatio);
     }
 
     void setTransientDetection(bool enabled) {
@@ -1116,26 +1222,28 @@ public:
         ++inputPosition;
 
         // 两级重采样步长的乘积决定 PGHI 的时间伸缩率。
-        const float inputStep = inputResampleStep();
-        const float outputStep = currentRatio / inputStep;
-        const float cutoff = inputStep > 1.0f ? 1.0f / inputStep : 1.0f;
+        // processFrame 可能在本采样更新比率，两级重采样沿用进入本采样时的步长。
+        const float inputStep = inputResampleStep;
+        const float outputStep = outputResampleStep;
+        const float cutoff = outputResampleCutoff;
+        const float stretch = inputStep * outputStep;
         while ((uint64_t)inputResamplePosition + kInputRadius < inputPosition) {
             const uint64_t lower = (uint64_t)inputResamplePosition;
-            const float sample = cutoff == 1.0f && inputResamplePosition == (double)lower
+            const float sample = inputResamplePosition == (double)lower
                 ? inputResampleRing[(size_t)(lower % kInputResampleRing)]
-                : interpolate(inputResampleRing, inputResamplePosition, cutoff, inputKernel);
+                : interpolate(inputResampleRing, inputResamplePosition, 1.0f, inputKernel);
             inputRing[inputWrite] = sample;
             silentSamples = sample != 0.0f ? 0 : silentSamples + (silentSamples < windowSize);
-            advanceAnalysis(inputResamplePosition, inputStep * outputStep);
+            advanceAnalysis(inputResamplePosition, stretch);
             inputResamplePosition += (double)inputStep;
         }
         if (rtpghi.occupied != 0) rtpghi.drain(kRtpghiStepsPerSample);
-        return renderOutputSample(outputStep);
+        return renderOutputSample(outputStep, cutoff);
     }
 
     void advanceAnalysis(double sourcePosition, float stretch) {
         inputSourcePositions[inputWrite] = sourcePosition;
-        inputWrite = (inputWrite + 1) % windowSize;
+        if (++inputWrite == windowSize) inputWrite = 0;
         collectedSamples = collectedSamples + 1 < windowSize ? collectedSamples + 1 : windowSize;
         ++samplesSinceFrame;
 
@@ -1232,7 +1340,7 @@ public:
     }
 
     void processFrame(size_t analysisHop) {
-        currentRatio += 0.25f * (targetRatio - currentRatio);
+        setCurrentRatio(currentRatio + 0.25f * (targetRatio - currentRatio));
         if (silentSamples == windowSize) {
             if (!firstFrame) resetPhaseState();
             completeSynthesisFrame(0, analysisHop, true, RtpghiAnchor::None);
@@ -1240,7 +1348,7 @@ public:
         }
 
         // 为输出抗混叠滤波保留过渡带，跳过更高频点的相位分析和传播。
-        const float outputStep = currentRatio / inputResampleStep();
+        const float outputStep = outputResampleStep;
         const float band = outputStep > 1.25f ? 1.25f / outputStep : 1.0f;
         const size_t activeBins = 1 + (size_t)((float)(numBins - 1) * band);
         const bool detect = transientDetection && !firstFrame && detectorActiveBins != 0;
@@ -1342,9 +1450,16 @@ public:
     }
 
     void addSynthesis(uint64_t start, size_t windowOffset, size_t fftOffset, size_t length) {
-        for (size_t i = 0; i < length; ++i) {
-            const size_t index = (size_t)((start + windowOffset + i) % kSynthesisRing);
-            synthesisRing[index] += fftTime[fftOffset + i] * synthesisWindow[windowOffset + i];
+        const size_t index = (size_t)((start + windowOffset) % kSynthesisRing);
+        const size_t available = kSynthesisRing - index;
+        const size_t lengthBeforeWrap = length < available ? length : available;
+        const float* time = fftTime + fftOffset;
+        const float* weights = synthesisWindow + windowOffset;
+        for (size_t i = 0; i < lengthBeforeWrap; ++i) {
+            synthesisRing[index + i] += time[i] * weights[i];
+        }
+        for (size_t i = lengthBeforeWrap; i < length; ++i) {
+            synthesisRing[i - lengthBeforeWrap] += time[i] * weights[i];
         }
     }
 
@@ -1362,19 +1477,17 @@ public:
     }
 
     void buildJointEdges(JointPhaseFrame& frame, double sourceOffset) {
-        const float inputOffset = (float)(sourceOffset / inputResampleStep());
+        const float inputOffset = (float)(sourceOffset / inputResampleStep);
         const float target = inputOffset * currentRatio;
         const size_t half = jointShortSize / 2;
         if (fabsf(inputOffset) >= 0.84f * (float)half || fabsf(target) >= 0.95f * (float)halfWindow) return;
-        const size_t low = 1 + (size_t)(400.0f * (float)frameSize * inputResampleStep() / sampleRate);
+        const size_t low = 1 + (size_t)(400.0f * (float)frameSize * inputResampleStep / sampleRate);
         const size_t end = frame.bins < numBins - 1 ? frame.bins : numBins - 1;
         if (end < low + 2) return;
 
-        const size_t begin = inputWrite + halfWindow - half;
-        for (size_t i = 0; i < half; ++i) {
-            fftInput[i] = inputRing[(begin + half + i) % windowSize] * jointShortWindow[half + i];
-            fftInput[frameSize - half + i] = inputRing[(begin + i) % windowSize] * jointShortWindow[i];
-        }
+        const size_t offset = halfWindow - half;
+        windowInput(jointShortWindow + half, half, fftInput, halfWindow);
+        windowInput(jointShortWindow, half, fftInput + frameSize - half, offset);
         for (size_t i = half; i < frameSize - half; ++i) fftInput[i] = 0.0f;
         fft.forward(fftInput, detOutput, end);
 
@@ -1385,7 +1498,7 @@ public:
             if (power > peak) peak = power;
         }
         const float binWidth = 6.283185307179586f / (float)frameSize;
-        const float tolerance = 0.002f * sampleRate / inputResampleStep() * binWidth;
+        const float tolerance = 0.002f * sampleRate / inputResampleStep * binWidth;
         const float ramp = (target - inputOffset) * binWidth;
         const float center = windowType == 2 ? (float)halfWindow * binWidth : 0.0f;
         for (size_t bin = low + 1; bin < end; ++bin) {
@@ -1661,7 +1774,7 @@ public:
         const size_t window = dsfluxWindow;
 
         bool rise = false;
-        if (dsfluxFilled >= window) {
+        if (dsfluxCooldown == 0 && dsfluxFilled >= window) {
             for (size_t i = 0; i < window; ++i) dsfluxScratch[i] = dsfluxHistory[i];
             for (size_t i = 1; i < window; ++i) {
                 const float v = dsfluxScratch[i];
@@ -1705,21 +1818,36 @@ public:
     }
 
     void windowInput(const float* weights, size_t length, float* frame, size_t offset = 0) const {
-        for (size_t i = 0; i < length; ++i) {
-            frame[i] = inputRing[(inputWrite + offset + i) % windowSize] * weights[i];
+        size_t start = inputWrite + offset;
+        if (start >= windowSize) start -= windowSize;
+        const size_t available = windowSize - start;
+        const size_t lengthBeforeWrap = length < available ? length : available;
+        for (size_t i = 0; i < lengthBeforeWrap; ++i) {
+            frame[i] = inputRing[start + i] * weights[i];
+        }
+        for (size_t i = lengthBeforeWrap; i < length; ++i) {
+            frame[i] = inputRing[i - lengthBeforeWrap] * weights[i];
         }
     }
 
     void windowCenteredInput(const float* weights, float* frame) const {
-        for (size_t i = 0; i < halfWindow; ++i) {
-            frame[i] = inputRing[(inputWrite + halfWindow + i) % windowSize] * weights[halfWindow + i];
-            frame[frameSize - halfWindow + i] = inputRing[(inputWrite + i) % windowSize] * weights[i];
-        }
+        windowInput(weights + halfWindow, halfWindow, frame, halfWindow);
+        windowInput(weights, halfWindow, frame + frameSize - halfWindow);
         for (size_t i = halfWindow; i < frameSize - halfWindow; ++i) frame[i] = 0.0f;
     }
 
     void synthesizeSpectrum(const float* magnitude, const float* phase, size_t activeBins) {
-        for (size_t bin = 0; bin < activeBins; ++bin) {
+        size_t bin = 0;
+        for (; bin + 4 <= activeBins; bin += 4) {
+            v128_t sine, cosine;
+            synthesisSinCos(wasm_v128_load(phase + bin), sine, cosine);
+            const v128_t amplitude = wasm_v128_load(magnitude + bin);
+            const v128_t real = wasm_f32x4_mul(amplitude, cosine);
+            const v128_t imag = wasm_f32x4_mul(amplitude, sine);
+            wasm_v128_store(fftOutput + 2 * bin, wasm_i32x4_shuffle(real, imag, 0, 4, 1, 5));
+            wasm_v128_store(fftOutput + 2 * bin + 4, wasm_i32x4_shuffle(real, imag, 2, 6, 3, 7));
+        }
+        for (; bin < activeBins; ++bin) {
             float sine, cosine;
             sinCos(phase[bin], sine, cosine);
             fftOutput[2 * bin] = magnitude[bin] * cosine;
@@ -1755,16 +1883,21 @@ public:
         }
         const size_t start = (size_t)((lower + 1 - kernel.radius) % RingSize);
         // RingSize 是 2 的幂，启动时负采样索引映射到已清零的环尾。
+        const size_t length = 2 * kernel.radius;
+        const size_t available = RingSize - start;
+        const size_t lengthBeforeWrap = length < available ? length : available;
         float output = 0.0f;
-        for (size_t i = 0; i < 2 * kernel.radius; ++i) {
-            output += ring[(start + i) % RingSize] * kernel.weights[i];
+        for (size_t i = 0; i < lengthBeforeWrap; ++i) {
+            output += ring[start + i] * kernel.weights[i];
+        }
+        for (size_t i = lengthBeforeWrap; i < length; ++i) {
+            output += ring[i - lengthBeforeWrap] * kernel.weights[i];
         }
         return output / kernel.weightSum;
     }
 
-    float renderOutputSample(float outputStep) {
+    float renderOutputSample(float outputStep, float cutoff) {
         constexpr size_t radius = kMaxOutputRadius;
-        const float cutoff = outputStep > 1.0f ? 1.0f / outputStep : 1.0f;
         if (!resamplerStarted) {
             if (synthesisAvailable <= outputStart + hopSize + radius) return 0.0f;
             resamplePosition = (double)outputStart;

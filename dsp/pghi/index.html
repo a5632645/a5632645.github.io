@@ -329,7 +329,7 @@
             // 加载 wasm 核心，把字节传给 worklet 自行编译实例化
             // （AudioWorklet 的 MessagePort 传 WebAssembly.Module 在部分 Chrome 版本不可靠）
             try {
-                const resp = await fetch('pghi_shifter.wasm?v=18');
+                const resp = await fetch('pghi_shifter.wasm?v=20');
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const bytes = await resp.arrayBuffer();
                 state.worklet.port.postMessage({ type: 'wasm', bytes });
@@ -378,7 +378,7 @@
             const geometry = state.geometry;
             const confirmed = geometry?.hop === hop && geometry.window === window;
             const winLen = confirmed ? geometry.windowSize : hop * WIN_OVERLAP[window];
-            const fft = confirmed ? geometry.fftSize : 2 * winLen;
+            const fft = confirmed ? geometry.fftSize : 2 ** Math.ceil(Math.log2(2 * winLen));
             document.getElementById('winInfo').textContent = '窗长 ' + winLen + ' / FFT ' + fft;
         }
 
