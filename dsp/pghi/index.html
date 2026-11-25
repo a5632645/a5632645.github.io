@@ -136,15 +136,6 @@
             margin: 10px 0;
         }
 
-        .mode-btns {
-            display: inline-flex;
-            gap: 4px;
-            flex-wrap: wrap;
-        }
-
-        .mode-btns .win-btn {
-            padding: 3px 8px;
-        }
     </style>
 </head>
 
@@ -213,18 +204,14 @@
                     <span class="win-val" id="pitchVal">+0 st</span>
                 </div>
                 <div class="win-row">
-                    <label class="win-label" for="phaseSel">相位积分</label>
-                    <select class="win-select" id="phaseSel">
-                        <option value="0" selected>PGHI</option>
-                        <option value="1" title="使用 DSPark 的起音标记，增加两个合成 hop 的前瞻。">二维联合积分</option>
-                        <option value="2" title="固定 DSPark 瞬态帧的相位，回溯校正与它重叠的 STFT 帧。增加窗长加一个 hop 的合成延迟。">双向 RTPGHI（整帧重置）</option>
-                        <option value="3" title="DSPark 触发后按 Röbel 的谱峰能量重心选区，重置选中峰区的时间入口并回溯。">双向 RTPGHI（局部重置）</option>
+                    <label class="win-label" for="algorithmSel">算法</label>
+                    <select class="win-select" id="algorithmSel">
+                        <option value="0">RTPGHI</option>
+                        <option value="1" selected title="使用 DSPark 检测瞬态并重置整帧相位。">RTPGHI相位重置</option>
+                        <option value="2" title="使用 DSPark 的起音标记，增加两个合成 hop 的前瞻。">二维联合积分</option>
+                        <option value="3" title="固定 DSPark 瞬态帧的相位，回溯校正与它重叠的 STFT 帧。">双向RTPGHI全局重置</option>
+                        <option value="4" title="用 Röbel 谱峰能量重心检测瞬态，锚定选中峰区并回溯。">双向RTPGHI局部重置</option>
                     </select>
-                    <span class="win-label">瞬态检测</span>
-                    <div class="mode-btns" id="modeBtns">
-                        <button class="win-btn" data-mode="0">None</button>
-                        <button class="win-btn on" data-mode="1">DSPark</button>
-                    </div>
                     <button class="win-btn" id="bypassBtn">BYPASS: OFF</button>
                 </div>
                 <div class="win-row">
@@ -276,7 +263,6 @@
     <script>
         'use strict';
 
-        const MODE_NAMES = ['None', 'DSPark'];
         const state = {
             ctx: null,
             worklet: null,
@@ -290,7 +276,7 @@
             startCtxTime: 0,
             displayInfo: null,
             geometry: null,
-            params: { pitch: 0, mode: 1, phaseIntegration: 0, bypass: false, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
+            params: { pitch: 0, algorithm: 1, bypass: false, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
         };
 
         // ---------------- AudioContext / Worklet ----------------
@@ -301,7 +287,7 @@
             state.ctx.addEventListener('statechange', () => {
                 if (state.ctx.state !== 'running') updateAudioLoad();
             });
-            await state.ctx.audioWorklet.addModule('pghi_worklet.js?v=7');
+            await state.ctx.audioWorklet.addModule('pghi_worklet.js?v=8');
             state.worklet = new AudioWorkletNode(state.ctx, 'pghi-processor', {
                 outputChannelCount: [2], channelCount: 2, channelCountMode: 'clamped-max'
             });
@@ -329,7 +315,7 @@
             // 加载 wasm 核心，把字节传给 worklet 自行编译实例化
             // （AudioWorklet 的 MessagePort 传 WebAssembly.Module 在部分 Chrome 版本不可靠）
             try {
-                const resp = await fetch('pghi_shifter.wasm?v=20');
+                const resp = await fetch('pghi_shifter.wasm?v=22');
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const bytes = await resp.arrayBuffer();
                 state.worklet.port.postMessage({ type: 'wasm', bytes });
@@ -491,10 +477,6 @@
             // 标题
             ctx.fillStyle = '#e8edf2';
             ctx.fillText('INPUT WAVEFORM (3 s)', 12, 18);
-            ctx.fillStyle = info.mode === 0 ? '#7e848b' : '#e1ac4a';
-            ctx.textAlign = 'right';
-            ctx.fillText(MODE_NAMES[info.mode], CW - 12, 18);
-            ctx.textAlign = 'left';
 
             // 中线
             const midY = (waveTop + waveBottom) * 0.5;
@@ -522,7 +504,7 @@
             }
 
             // 瞬态检测点竖线
-            if (info.mode !== 0 && info.markCount > 0) {
+            if (info.markCount > 0) {
                 const samplesPerCol = info.displaySize / cols;
                 const pos = info.position;
                 ctx.fillStyle = '#e1ac4a';
@@ -594,8 +576,9 @@
                 updateWindowInfo();
             });
 
-            document.getElementById('phaseSel').addEventListener('change', (e) => {
-                state.params.phaseIntegration = Number(e.target.value);
+            document.getElementById('algorithmSel').addEventListener('change', (e) => {
+                state.params.algorithm = Number(e.target.value);
+                document.getElementById('cooldownRange').disabled = state.params.algorithm === 0;
                 applyParams();
             });
 
@@ -605,15 +588,6 @@
                 document.getElementById('pitchVal').textContent =
                     (state.params.pitch > 0 ? '+' : '') + state.params.pitch + ' st';
                 applyParams();
-            });
-
-            document.querySelectorAll('#modeBtns .win-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    state.params.mode = parseInt(btn.dataset.mode, 10);
-                    document.querySelectorAll('#modeBtns .win-btn').forEach(b =>
-                        b.classList.toggle('on', b === btn));
-                    applyParams();
-                });
             });
 
             document.getElementById('bypassBtn').addEventListener('click', () => {

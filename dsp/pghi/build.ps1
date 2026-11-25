@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
     $exports = @(
-        'init', 'process', 'set_pitch_shift', 'set_transient_mode', 'set_phase_integration',
+        'init', 'process', 'set_pitch_shift', 'set_algorithm',
         'set_cooldown_ms', 'reinit', 'reset', 'in_ptr', 'out_ptr', 'in_right_ptr',
         'out_right_ptr', 'env_ptr', 'marks_ptr', 'mark_count', 'col_index', 'total_columns',
         'hop', 'window_size', 'fft_size', 'window_type', 'display_size', 'columns', 'position', 'ratio'

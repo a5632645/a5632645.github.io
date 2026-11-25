@@ -4,7 +4,7 @@
  * DSP 核心在 pghi_shifter.wasm（C++ 编译，clang wasm32，无 emscripten）。
  * 主线程加载 wasm Module 后通过 port 传入，本处理器在此实例化并逐量子调用：
  *   process(): 输入拷入 wasm 内存 → ex.process(n) → 输出拷回
- *   params:    音高 / 瞬态模式 / 统一冷却时间(ms) / HOP / 窗函数
+ *   params:    音高 / 算法 / 统一冷却时间(ms) / HOP / 窗函数
  *   display:   每 8 个量子从 wasm 读取波形包络与瞬态标记发回主线程
  *
  */
@@ -28,7 +28,6 @@ class PghiProcessor extends AudioWorkletProcessor {
         this.inBase = [];
         this.outBase = [];
         this.pitch = 0.0;
-        this.mode = 1;        // DSPark
         this.bypass = false;
         this.hop = 512;
         this.windowType = 'blackman-harris-3term';
@@ -52,12 +51,8 @@ class PghiProcessor extends AudioWorkletProcessor {
             this.pitch = m.pitch;
             ex.set_pitch_shift(this.pitch);
         }
-        if (typeof m.mode === 'number') {
-            this.mode = m.mode === 1 ? 1 : 0;
-            ex.set_transient_mode(this.mode);
-        }
-        if (typeof m.phaseIntegration === 'number') {
-            ex.set_phase_integration(m.phaseIntegration);
+        if (Number.isInteger(m.algorithm)) {
+            ex.set_algorithm(m.algorithm);
         }
         if (typeof m.cooldownMs === 'number') {
             ex.set_cooldown_ms(m.cooldownMs);
@@ -93,7 +88,6 @@ class PghiProcessor extends AudioWorkletProcessor {
         this.inBase = [ex.in_ptr() >> 2, ex.in_right_ptr() >> 2];
         this.outBase = [ex.out_ptr() >> 2, ex.out_right_ptr() >> 2];
         ex.init(sampleRate, this.hop, WINDOW_INDEX[this.windowType]);
-        ex.set_transient_mode(this.mode);
         ex.set_cooldown_ms(64);
         this.postGeometry();
         this.port.postMessage({ type: 'wasm-ready' });
@@ -182,7 +176,6 @@ class PghiProcessor extends AudioWorkletProcessor {
             hop: ex.hop(),
             window: this.windowType,
             ratio: ex.ratio(),
-            mode: this.mode,
         });
     }
 }

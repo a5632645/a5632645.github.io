@@ -608,10 +608,11 @@ struct JointPhaseFrame {
     float correction[kMaxBins];
 };
 
-enum class PhaseIntegration {
-    Pghi,
-    Joint,
-    Bidirectional,
+enum class Algorithm {
+    Rtpghi,
+    RtpghiPhaseReset,
+    JointIntegration,
+    BidirectionalGlobalReset,
     BidirectionalLocalReset,
 };
 
@@ -827,9 +828,8 @@ public:
         outputResampleStep = ratio / inputResampleStep;
         outputResampleCutoff = outputResampleStep > 1.0f ? 1.0f / outputResampleStep : 1.0f;
     }
-    bool transientDetection = true;
     bool firstFrame = true;
-    PhaseIntegration phaseIntegration = PhaseIntegration::Pghi;
+    Algorithm algorithm = Algorithm::RtpghiPhaseReset;
     JointPhaseFrame jointFrames[kJointFrames];
     size_t jointHead = 0;
     size_t jointCount = 0;
@@ -842,6 +842,10 @@ public:
     size_t jointOnsetWrite = 0;
     float transientEndSlope = 0.0f;
     size_t transientSamplesLeft = 0;
+    size_t localTransientCooldown = 0;
+    float transientBackground = 0.0f;
+    bool transientBackgroundReady = false;
+    double localTransientPosition = 0.0;
     bool transientPeakBins[kMaxBins];
 
     // FFT
@@ -1161,6 +1165,9 @@ public:
         dsfluxWindow = kDsFluxReferenceWindow;
         dsfluxCooldown = 0;
         transientSamplesLeft = 0;
+        localTransientCooldown = 0;
+        transientBackground = 0.0f;
+        transientBackgroundReady = false;
         firstFrame = true;
     }
 
@@ -1185,13 +1192,6 @@ public:
         if (semitones < -24.0f) semitones = -24.0f;
         targetRatio = exp2f(semitones / 12.0f);
         if (!analysisStarted) setCurrentRatio(targetRatio);
-    }
-
-    void setTransientDetection(bool enabled) {
-        if (transientDetection == enabled) return;
-        transientDetection = enabled;
-        jointOnsetRead = jointOnsetWrite = 0;
-        resetPhaseState();
     }
 
     void setCooldownMs(float ms) {
@@ -1292,6 +1292,20 @@ public:
         // Röbel §2–3，以谱谷界定峰区，用幅度平方加权的群延迟估计每个峰区的重心。
         // https://www.dafx.de/paper-archive/2003/pdfs/dafx32.pdf
         constexpr double kPeakStartFactor = 2.0;
+        constexpr double kPeakEnergyGrowth = 1.5;
+        constexpr double kMaximumTimingSpread = 0.01;
+        constexpr float kInitialAttackShare = 0.25f;
+        constexpr float kMinimumEmergingShare = 0.0025f;
+        constexpr float kBackgroundFactor = 3.0f;
+        constexpr float kBackgroundMargin = 0.001f;
+        const bool tracking = transientSamplesLeft != 0;
+        if (!tracking) {
+            if (localTransientCooldown != 0) {
+                --localTransientCooldown;
+                return false;
+            }
+            for (bool& selected : transientPeakBins) selected = false;
+        }
         float peak = 0.0f;
         for (size_t bin = 0; bin < bins; ++bin) {
             if (currentMag[bin] > peak) peak = currentMag[bin];
@@ -1300,7 +1314,12 @@ public:
         const float center = analysisWindowCenterPhase();
         double selectedEnergy = 0.0;
         double leadingEnergy = 0.0;
+        double totalEnergy = 0.0;
+        double emergingEnergy = 0.0;
+        double emergingMoment = 0.0;
+        double emergingSquareMoment = 0.0;
         double peakEnergy = 0.0;
+        double previousPeakEnergy = 0.0;
         double peakMoment = 0.0;
         size_t begin = 0;
         for (size_t bin = 1; bin < bins; ++bin) {
@@ -1310,11 +1329,23 @@ public:
             const float slope = wrapToPi(currentAnalysisPhase[bin - 1] - currentAnalysisPhase[bin] - center);
             peakEnergy += weight;
             peakMoment += weight * slope;
+            if (bin < previousActiveBins) {
+                const double pastLeft = previousMag[bin - 1];
+                const double pastRight = previousMag[bin];
+                previousPeakEnergy += pastLeft * pastLeft + pastRight * pastRight;
+            }
             const bool valley = bin + 1 < bins && right <= left && right < currentMag[bin + 1];
             if (!valley && bin + 1 != bins) continue;
 
             const double endMoment = transientEndSlope * peakEnergy;
-            const bool emerging = peakMoment > kPeakStartFactor * endMoment;
+            const bool emerging = peakMoment > kPeakStartFactor * endMoment
+                && peakEnergy > kPeakEnergyGrowth * previousPeakEnergy;
+            totalEnergy += peakEnergy;
+            if (emerging) {
+                emergingEnergy += peakEnergy;
+                emergingMoment += peakMoment;
+                emergingSquareMoment += peakMoment * (peakMoment / peakEnergy);
+            }
             for (size_t k = begin; k <= bin; ++k) {
                 const double magnitude = currentMag[k];
                 if (magnitude <= floor) continue;
@@ -1325,7 +1356,33 @@ public:
                 if (peakMoment > endMoment) leadingEnergy += energy;
             }
             begin = bin + 1;
-            peakEnergy = peakMoment = 0.0;
+            peakEnergy = previousPeakEnergy = peakMoment = 0.0;
+        }
+
+        if (!tracking) {
+            // 用新兴峰区的能量占比衡量背景活动，抑制零散谱谷和旁瓣的触发。
+            const float share = totalEnergy > 0.0 ? (float)(emergingEnergy / totalEnergy) : 0.0f;
+            const float threshold = kBackgroundFactor * transientBackground + kBackgroundMargin;
+            const double meanSlope = emergingEnergy > 0.0 ? emergingMoment / emergingEnergy : 0.0;
+            const double spread = kMaximumTimingSpread * (double)windowSize * 6.283185307179586 / (double)frameSize;
+            const bool coherent = emergingSquareMoment <= emergingEnergy * (meanSlope * meanSlope + spread * spread);
+            if (!transientBackgroundReady) {
+                transientBackgroundReady = true;
+                if (!coherent || share < kInitialAttackShare) {
+                    transientBackground = share;
+                    return false;
+                }
+            }
+            if (share < kMinimumEmergingShare || share < threshold || !coherent) {
+                const float update = (float)analysisHop / (4.0f * (float)windowSize);
+                transientBackground += update * (share - transientBackground);
+                return false;
+            }
+            transientSamplesLeft = windowSize;
+            const double offset = meanSlope * ((double)frameSize / 6.283185307179586);
+            size_t position = halfWindow + (size_t)(offset + 0.5);
+            if (position >= windowSize) position = windowSize - 1;
+            localTransientPosition = inputSourcePositions[(inputWrite + position) % windowSize];
         }
 
         // 等多数已选峰区的能量接近窗中心，再在同一帧重置。
@@ -1351,20 +1408,19 @@ public:
         const float outputStep = outputResampleStep;
         const float band = outputStep > 1.25f ? 1.25f / outputStep : 1.0f;
         const size_t activeBins = 1 + (size_t)((float)(numBins - 1) * band);
-        const bool detect = transientDetection && !firstFrame && detectorActiveBins != 0;
-        const bool useLocalReset = phaseIntegration == PhaseIntegration::BidirectionalLocalReset;
+        const bool useLocalReset = algorithm == Algorithm::BidirectionalLocalReset;
+        const bool detectDsPark = algorithm != Algorithm::Rtpghi && !useLocalReset
+            && !firstFrame && detectorActiveBins != 0;
         transformWindow(window, fftOutput, activeBins);
         analyseSpectrum(activeBins);
+        const bool localReset = useLocalReset && collectTransientPeakBins(activeBins, analysisHop);
         size_t detectorOffset = 0;
-        if (detect) {
-            if (phaseIntegration == PhaseIntegration::Joint) {
+        if (detectDsPark) {
+            if (algorithm == Algorithm::JointIntegration) {
                 // 检测窗向前取样，为重置帧之后的联合积分帧提供起音坐标。
                 const size_t maxOffset = windowSize - detWindowSize;
                 const size_t ahead = maxOffset / 2 + jointShortSize / 4;
                 detectorOffset = ahead < maxOffset ? ahead : maxOffset;
-            } else if (useLocalReset) {
-                // 在起音穿过主分析窗中心之前开启峰区收集。
-                detectorOffset = windowSize - detWindowSize;
             }
             windowInput(detWindow, detWindowSize, detInput, detectorOffset);
             detFft.forward(detInput, detOutput, detectorActiveBins);
@@ -1373,19 +1429,14 @@ public:
             }
         }
 
-        const bool dsparkReset = detect && detectDsParkTransient(analysisHop);
-        const bool frameReset = dsparkReset && !useLocalReset;
+        const bool frameReset = detectDsPark && detectDsParkTransient(analysisHop);
         const bool locked = firstFrame || frameReset;
         RtpghiAnchor anchor = frameReset ? RtpghiAnchor::Frame : RtpghiAnchor::None;
-        if (dsparkReset) {
+        if (frameReset) {
             const size_t center = (inputWrite + detectorOffset + (detWindowSize >> 1)) % windowSize;
             const double onset = inputSourcePositions[center];
             putTransientMark(onset);
-            if (phaseIntegration == PhaseIntegration::Joint) queueJointOnset(onset);
-            if (useLocalReset && transientSamplesLeft == 0) {
-                transientSamplesLeft = windowSize;
-                for (bool& selected : transientPeakBins) selected = false;
-            }
+            if (algorithm == Algorithm::JointIntegration) queueJointOnset(onset);
         }
         if (locked) {
             for (size_t bin = 0; bin < activeBins; ++bin) currentSynthPhase[bin] = currentAnalysisPhase[bin];
@@ -1395,8 +1446,11 @@ public:
                 previousAnalysisPhase[bin] = currentAnalysisPhase[bin];
                 previousSynthPhase[bin] = currentAnalysisPhase[bin];
             }
-            const bool localReset = transientSamplesLeft != 0 && collectTransientPeakBins(activeBins, analysisHop);
-            if (propagatePghi(analysisHop, activeBins, localReset)) anchor = RtpghiAnchor::Local;
+            if (propagatePghi(analysisHop, activeBins, localReset)) {
+                anchor = RtpghiAnchor::Local;
+                putTransientMark(localTransientPosition);
+                localTransientCooldown = cooldownFramesForHop(cooldownMs, analysisHop);
+            }
         }
 
         completeSynthesisFrame(activeBins, analysisHop, locked, anchor);
@@ -1607,13 +1661,13 @@ public:
     void completeSynthesisFrame(size_t bins, size_t analysisHop, bool locked, RtpghiAnchor anchor) {
         const uint64_t start = synthesisFrameStart;
         synthesisFrameStart += hopSize;
-        if (phaseIntegration == PhaseIntegration::Bidirectional ||
-            phaseIntegration == PhaseIntegration::BidirectionalLocalReset) {
+        if (algorithm == Algorithm::BidirectionalGlobalReset ||
+            algorithm == Algorithm::BidirectionalLocalReset) {
             completeRtpghiFrame(start, bins, analysisHop, locked, anchor);
             return;
         }
         if (bins != 0) synthesizeSpectrum(currentMag, currentSynthPhase, bins);
-        if (phaseIntegration == PhaseIntegration::Pghi) {
+        if (algorithm != Algorithm::JointIntegration) {
             renderSynthesisFrame(start, bins != 0);
             return;
         }
@@ -1662,36 +1716,37 @@ public:
     }
 
     bool propagatePghi(size_t analysisHop, size_t activeBins, bool localReset) {
-        for (size_t bin = 0; bin < activeBins; ++bin) processedBins[bin] = PghiBinState::Pending;
         heapSize = 0;
+        size_t processedCount = 0;
         for (size_t bin = 0; bin < activeBins; ++bin) {
-            heapPush(previousMag[bin], (uint32_t)bin, true);
+            if (localReset && transientPeakBins[bin]) {
+                // 在频率传播之前固定入选 bin，避免邻近稳态峰抢占锚点。
+                processedBins[bin] = PghiBinState::Reset;
+                currentSynthPhase[bin] = currentAnalysisPhase[bin];
+                heapPush(currentMag[bin], (uint32_t)bin, false);
+                ++processedCount;
+            } else {
+                processedBins[bin] = PghiBinState::Pending;
+                heapPush(previousMag[bin], (uint32_t)bin, true);
+            }
         }
         const float analysisScale = 6.283185307179586f * (float)analysisHop / (float)frameSize;
         const float synthesisScale = 6.283185307179586f * (float)hopSize / (float)frameSize;
         const float stretchRatio = (float)hopSize / (float)analysisHop;
         // 自然顺序窗的中心在 N/2。频率梯度先扣除这段线性相位，再按伸缩率传播。
         const float windowCenterPhase = analysisWindowCenterPhase();
-        bool hasLocalAnchor = false;
-        size_t processedCount = 0;
+        const bool hasLocalAnchor = processedCount != 0;
         while (processedCount < activeBins && heapSize > 0) {
             heapPop();
             const size_t bin = popBin;
             const bool isPrev = popIsPrev;
             if (isPrev) {
                 if (processedBins[bin] != PghiBinState::Pending) continue;
-                // 只在入选峰区内重置堆实际选中的时间入口。
-                if (localReset && bin < previousActiveBins && transientPeakBins[bin]) {
-                    currentSynthPhase[bin] = currentAnalysisPhase[bin];
-                    processedBins[bin] = PghiBinState::Reset;
-                    hasLocalAnchor = true;
-                } else {
-                    const float expected = analysisScale * (float)bin;
-                    const float residual = wrapToPi(currentAnalysisPhase[bin] - previousAnalysisPhase[bin] - expected);
-                    currentSynthPhase[bin] = wrapToPi(previousSynthPhase[bin]
-                        + synthesisScale * (float)bin + stretchRatio * residual);
-                    processedBins[bin] = PghiBinState::Propagated;
-                }
+                const float expected = analysisScale * (float)bin;
+                const float residual = wrapToPi(currentAnalysisPhase[bin] - previousAnalysisPhase[bin] - expected);
+                currentSynthPhase[bin] = wrapToPi(previousSynthPhase[bin]
+                    + synthesisScale * (float)bin + stretchRatio * residual);
+                processedBins[bin] = PghiBinState::Propagated;
                 ++processedCount;
                 heapPush(currentMag[bin], (uint32_t)bin, false);
                 continue;
@@ -1960,17 +2015,11 @@ void set_pitch_shift(float semitones) {
     g_mid.setPitchShift(semitones);
     g_side.setPitchShift(semitones);
 }
-void set_transient_mode(int mode) {
-    g_mid.setTransientDetection(mode == 1);
-    g_side.setTransientDetection(mode == 1);
-}
-void set_phase_integration(int mode) {
-    PhaseIntegration integration = PhaseIntegration::Pghi;
-    if (mode == 1) integration = PhaseIntegration::Joint;
-    if (mode == 2) integration = PhaseIntegration::Bidirectional;
-    if (mode == 3) integration = PhaseIntegration::BidirectionalLocalReset;
-    if (g_mid.phaseIntegration == integration) return;
-    g_mid.phaseIntegration = g_side.phaseIntegration = integration;
+void set_algorithm(int index) {
+    if (index < (int)Algorithm::Rtpghi || index > (int)Algorithm::BidirectionalLocalReset) return;
+    const Algorithm algorithm = (Algorithm)index;
+    if (g_mid.algorithm == algorithm) return;
+    g_mid.algorithm = g_side.algorithm = algorithm;
     g_mid.reset();
     g_side.reset();
 }
