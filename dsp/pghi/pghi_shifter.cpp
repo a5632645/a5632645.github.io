@@ -646,6 +646,8 @@ constexpr size_t kRtpghiFrames = kMaxOverlap + kRtpghiSolveAhead;
 constexpr size_t kRtpghiStepsPerSample = 64;
 
 struct RtpghiHistory {
+    static constexpr float kMinimumForegroundRatio = 2.0f;
+    static constexpr float kMinimumAnchorFraction = 0.0625f;
     static constexpr unsigned kBinBits = 14;
     static constexpr size_t kBinMask = (1u << kBinBits) - 1u;
     static constexpr unsigned kStepBits = 17;
@@ -667,6 +669,9 @@ struct RtpghiHistory {
     size_t solveHead;
     size_t solveCount;
     RtpghiFrame* solveFrames[kMaxOverlap];
+    float transientBaseline[kMaxBins];
+    float solveBaseline[kMaxBins];
+    bool backwardOnly;
 
     // 每个格子最多被四条入边更新，锚点只入堆一次。
     Entry heap[kMaxEntries];
@@ -677,6 +682,16 @@ struct RtpghiHistory {
 
     RtpghiFrame& frame(size_t row) {
         return frames[(head + row) % kRtpghiFrames];
+    }
+
+    void captureTransientBackground(size_t bins) {
+        // 使用最早仍在历史中的频谱，尽量避开刚进入分析窗的瞬态。
+        const RtpghiFrame& oldest = frame(0);
+        const size_t available = count == 0 ? 0 : oldest.bins;
+        for (size_t bin = 0; bin < bins; ++bin) {
+            transientBaseline[bin] = bin < available ? oldest.magnitude[bin] : 0.0f;
+        }
+        for (size_t bin = bins; bin < kMaxBins; ++bin) transientBaseline[bin] = 0.0f;
     }
 
     void link(size_t index) {
@@ -722,7 +737,7 @@ struct RtpghiHistory {
     void expand(size_t row, size_t bin, float phase, float sourceStrength, uint32_t steps) {
         RtpghiFrame& target = *solveFrames[row];
         if (!target.pending[bin]) return;
-        const float magnitude = target.magnitude[bin];
+        const float magnitude = target.magnitude[bin] - (backwardOnly ? solveBaseline[bin] : 0.0f);
         const float strength = magnitude < sourceStrength ? magnitude : sourceStrength;
         if (strength < target.strength[bin] ||
             (strength == target.strength[bin] && steps >= target.steps[bin])) return;
@@ -732,7 +747,7 @@ struct RtpghiHistory {
         push(strength, steps, (row << kBinBits) | bin);
     }
 
-    void startPropagation(size_t overlap) {
+    void startPropagation(size_t overlap, RtpghiAnchor anchor) {
         // 先完成正在回溯的窗口，再为新锚点选取积分范围。
         drain(kMaxEntries);
         solveCount = count < overlap ? count : overlap;
@@ -746,24 +761,71 @@ struct RtpghiHistory {
             stretched |= source.stretched;
         }
         if (!stretched) return;
+        backwardOnly = anchor == RtpghiAnchor::Local;
         const float threshold = kRtpghiMagnitudeTolerance * peak;
         heapSize = 0;
         for (size_t& bucket : buckets) bucket = 0;
         occupied = lastPriority = 0;
+        if (backwardOnly) {
+            seedLocalPropagation(threshold);
+            return;
+        }
         for (size_t row = 0; row < solveCount; ++row) {
             RtpghiFrame& source = *solveFrames[row];
-            // 最新帧的逐帧积分结果已作为后续传播的起点。
-            const bool currentLocalAnchor = row + 1 == solveCount && source.anchor == RtpghiAnchor::Local;
+            const bool frameAnchor = source.anchor == RtpghiAnchor::Frame;
             for (size_t bin = 0; bin < source.bins; ++bin) {
                 const bool audible = source.magnitude[bin] > threshold;
-                const bool anchor = source.anchor == RtpghiAnchor::Frame ||
-                    (source.anchor == RtpghiAnchor::Local && source.anchorBins[bin]);
-                source.pending[bin] = audible && !source.locked && !currentLocalAnchor && !anchor;
+                source.pending[bin] = audible && !source.locked && !frameAnchor;
                 source.strength[bin] = 0.0f;
                 source.steps[bin] = 0;
-                if (audible && anchor) push(source.magnitude[bin], 0, (row << kBinBits) | bin);
+                if (audible && frameAnchor) push(source.magnitude[bin], 0, (row << kBinBits) | bin);
             }
         }
+    }
+
+    void seedLocalPropagation(float threshold) {
+        const size_t anchorRow = solveCount - 1;
+        RtpghiFrame& anchor = *solveFrames[anchorRow];
+        for (size_t bin = 0; bin < anchor.bins; ++bin) {
+            const float background = transientBaseline[bin];
+            solveBaseline[bin] = background;
+            anchor.pending[bin] = false;
+            const float excess = anchor.magnitude[bin] - background;
+            if (anchor.anchorBins[bin] && excess > threshold
+                && anchor.magnitude[bin] >= kMinimumForegroundRatio * background) {
+                push(excess, 0, (anchorRow << kBinBits) | bin);
+            }
+        }
+        // 回溯限制在本次锚点的频率范围内，已有锚点保留原来的相位。
+        for (size_t row = 0; row < anchorRow; ++row) {
+            RtpghiFrame& history = *solveFrames[row];
+            for (size_t bin = 0; bin < history.bins; ++bin) {
+                history.pending[bin] = !history.locked && bin < anchor.bins && anchor.anchorBins[bin]
+                    && !(history.anchor == RtpghiAnchor::Local && history.anchorBins[bin])
+                    && canRepairLocalBin(history.magnitude[bin], anchor.magnitude[bin], solveBaseline[bin], threshold);
+                history.strength[bin] = 0.0f;
+                history.steps[bin] = 0;
+            }
+        }
+    }
+
+    static bool canRepairLocalBin(float magnitude, float anchorMagnitude, float background, float threshold) {
+        // 背景占优或只剩微弱瞬态尾部时，沿用原来的逐帧积分相位。
+        const float anchorExcess = anchorMagnitude - background;
+        const float excess = magnitude - background;
+        return anchorMagnitude >= kMinimumForegroundRatio * background && anchorExcess > threshold
+            && magnitude >= kMinimumForegroundRatio * background && excess > threshold
+            && excess >= kMinimumAnchorFraction * anchorExcess;
+    }
+
+    void expandToPreviousFrame(size_t row, size_t bin, float strength, uint32_t steps) {
+        if (row == 0) return;
+        const RtpghiFrame& previous = *solveFrames[row - 1];
+        if (bin >= previous.bins) return;
+        const RtpghiFrame& source = *solveFrames[row];
+        // 局部回溯沿着瞬态的幅度下降方向走，遇到更早、更强的同频分量就止步。
+        if (backwardOnly && source.magnitude[bin] < previous.magnitude[bin]) return;
+        expand(row - 1, bin, source.phase[bin] - source.timeEdge[bin], strength, steps);
     }
 
     void drain(size_t budget) {
@@ -785,13 +847,11 @@ struct RtpghiHistory {
             if (bin + 1 < source.bins) {
                 expand(row, bin + 1, phase + source.frequencyEdge[bin + 1], strength, steps + 1);
             }
-            if (row + 1 < solveCount) {
+            if (!backwardOnly && row + 1 < solveCount) {
                 const RtpghiFrame& next = *solveFrames[row + 1];
                 if (bin < next.bins) expand(row + 1, bin, phase + next.timeEdge[bin], strength, steps + 1);
             }
-            if (row > 0 && bin < solveFrames[row - 1]->bins) {
-                expand(row - 1, bin, phase - source.timeEdge[bin], strength, steps + 1);
-            }
+            expandToPreviousFrame(row, bin, strength, steps + 1);
         }
     }
 };
@@ -1379,6 +1439,7 @@ public:
                 return false;
             }
             transientSamplesLeft = windowSize;
+            rtpghi.captureTransientBackground(bins);
             const double offset = meanSlope * ((double)frameSize / 6.283185307179586);
             size_t position = halfWindow + (size_t)(offset + 0.5);
             if (position >= windowSize) position = windowSize - 1;
@@ -1647,7 +1708,7 @@ public:
             }
         }
 
-        if (anchor != RtpghiAnchor::None) rtpghi.startPropagation(overlap);
+        if (anchor != RtpghiAnchor::None) rtpghi.startPropagation(overlap, anchor);
         // 保留重叠的历史帧，再留两个 hop 把堆传播摊到多个音频量子。
         if (rtpghi.count < overlap + kRtpghiSolveAhead) return;
         if (rtpghi.head == rtpghi.solveHead) rtpghi.drain(RtpghiHistory::kMaxEntries);
