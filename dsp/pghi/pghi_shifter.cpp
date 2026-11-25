@@ -2,7 +2,7 @@
 //
 // 从 qwqdsp/playing/playing.cpp 的 RealtimePitchShifter 移植，
 // 并带上浏览器版的新特性：HOP/窗函数运行时参数化、统一冷却时间（毫秒）、
-// 3 种瞬态检测（None / SuperFlux / DSPark）、900 列波形包络显示。
+// DSPark 瞬态检测（可关闭）、双向 RTPGHI 相位积分、900 列波形包络显示。
 //
 // 编译（clang wasm32，无需 emscripten / libc）：
 //   clang++ --target=wasm32 -msimd128 -O3 -std=c++17 -nostdlib -fno-exceptions -fno-rtti \
@@ -493,9 +493,6 @@ public:
     }
 };
 
-constexpr int kLocalPhaseMode = 3;
-constexpr size_t kFluxBands = 64;
-
 constexpr size_t kJointFrames = 3;
 constexpr size_t kJointShortWindow = 1024;
 constexpr float kJointPhaseLimit = 0.65f;
@@ -511,117 +508,188 @@ struct JointPhaseFrame {
     float correction[kMaxBins];
 };
 
-struct PhaseCorrectionBand {
-    size_t begin = 0;
-    size_t end = 0;
-    float delay = 0.0f;
-    float confidence = 0.0f;
+enum class PhaseIntegration {
+    Pghi,
+    Joint,
+    Bidirectional,
+    BidirectionalLocalReset,
 };
 
-// 短窗检测在原始输入时钟上运行，输出 Mid/Side 共享的起音坐标。
-class ShortFluxDetector {
-public:
-    void init() {
-        fft.init(kWindow);
-        for (size_t i = 0; i < kWindow; ++i) {
-            window[i] = 0.5f - 0.5f * cosf(6.283185307179586f * (float)i / (float)kWindow);
-        }
-        reset();
+enum class RtpghiAnchor {
+    None,
+    Frame,
+    Local,
+};
+
+constexpr float kRtpghiMagnitudeTolerance = 1.0e-6f;
+
+struct RtpghiFrame {
+    uint64_t start;
+    size_t bins;
+    bool locked;
+    RtpghiAnchor anchor;
+    bool stretched;
+    float peak;
+    float magnitude[kMaxBins];
+    float phase[kMaxBins];
+    float timeEdge[kMaxBins];      // 从上一帧到此帧
+    float frequencyEdge[kMaxBins]; // 从低一格频点到此频点
+    float strength[kMaxBins];
+    uint32_t steps[kMaxBins];
+    bool anchorBins[kMaxBins];
+    bool pending[kMaxBins];
+};
+
+constexpr size_t kRtpghiSolveAhead = 2;
+constexpr size_t kRtpghiFrames = kMaxOverlap + kRtpghiSolveAhead;
+constexpr size_t kRtpghiStepsPerSample = 64;
+
+struct RtpghiHistory {
+    static constexpr unsigned kBinBits = 14;
+    static constexpr size_t kBinMask = (1u << kBinBits) - 1u;
+    static constexpr unsigned kStepBits = 17;
+    static constexpr uint64_t kStepMask = (1u << kStepBits) - 1u;
+    static constexpr size_t kBuckets = 31 + kStepBits + 1;
+    static constexpr size_t kMaxEntries = 4 * kMaxOverlap * kMaxBins;
+    static_assert(kMaxBins <= kBinMask + 1);
+    static_assert(kMaxOverlap * kMaxBins <= kStepMask + 1);
+
+    struct Entry {
+        uint64_t priority;
+        size_t cell;
+        size_t next;
+    };
+
+    RtpghiFrame frames[kRtpghiFrames];
+    size_t head;
+    size_t count;
+    size_t solveHead;
+    size_t solveCount;
+    RtpghiFrame* solveFrames[kMaxOverlap];
+
+    // 每个格子最多被四条入边更新，锚点只入堆一次。
+    Entry heap[kMaxEntries];
+    size_t heapSize;
+    size_t buckets[kBuckets];
+    uint64_t occupied;
+    uint64_t lastPriority;
+
+    RtpghiFrame& frame(size_t row) {
+        return frames[(head + row) % kRtpghiFrames];
     }
 
-    void reset() {
-        write = 0;
-        samplesUntilFrame = kWindow;
-        for (size_t bin = 0; bin < kBins; ++bin) previousMagnitude[bin] = 0.0f;
-        pastFlux = peakFlux = background = 0.0f;
-        peakThreshold = 0.0f;
-        for (size_t band = 0; band < kFluxBands; ++band) peakBandConfidence[band] = 0.0f;
-        nextOnset = 0.0;
+    void link(size_t index) {
+        Entry& entry = heap[index - 1];
+        const uint64_t difference = entry.priority ^ lastPriority;
+        const size_t bucket = difference == 0 ? 0 : 64 - __builtin_clzll(difference);
+        entry.next = buckets[bucket];
+        buckets[bucket] = index;
+        occupied |= 1ull << bucket;
     }
 
-    const float* onsetBands() const { return detectedBandConfidence; }
-
-    double push(float mid, float side, uint64_t position, double cooldownSamples, bool trackBands) {
-        ring[0][write] = mid;
-        ring[1][write] = side;
-        write = (write + 1) % kWindow;
-        if (--samplesUntilFrame != 0) return -1.0;
-        samplesUntilFrame = kHop;
-
-        measurePower();
-        float flux = 0.0f;
-        float bandRise[kFluxBands] = {};
-        float bandMagnitude[kFluxBands] = {};
-        for (size_t bin = 1; bin < kBins; ++bin) {
-            const float magnitude = sqrtf(power[bin]);
-            const float rise = magnitude - previousMagnitude[bin];
-            if (rise > 0.0f) flux += rise;
-            if (trackBands) {
-                const size_t band = (bin - 1) * kFluxBands / (kBins - 1);
-                bandMagnitude[band] += magnitude;
-                if (rise > 0.0f) bandRise[band] += rise;
-            }
-            previousMagnitude[bin] = magnitude;
-        }
-        flux *= 2.0f / (float)kWindow;
-
-        // 正差的峰值领先窗中心处的冲击，用半个 hop 与四分之一窗校正时间戳。
-        const double onset = (double)(position + 1) - 1.5 * (double)kHop - 0.25 * (double)kWindow;
-        const bool hit = peakFlux > peakThreshold && peakFlux > pastFlux
-            && peakFlux >= flux && onset >= nextOnset;
-        if (trackBands) {
-            for (size_t band = 0; band < kFluxBands; ++band) {
-                if (hit) detectedBandConfidence[band] = peakBandConfidence[band];
-                const float relativeRise = bandRise[band] / (bandMagnitude[band] + 1.0e-12f);
-                const float scaled = 2.0f * (relativeRise - 0.25f);
-                peakBandConfidence[band] = scaled > 1.0f ? 1.0f : (scaled > 0.0f ? scaled : 0.0f);
-            }
-        }
-        const float threshold = 0.012f + 2.5f * background;
-        background += 0.08f * (flux - background);
-        pastFlux = peakFlux;
-        peakFlux = flux;
-        peakThreshold = threshold;
-        if (!hit) return -1.0;
-        nextOnset = onset + cooldownSamples;
-        return onset;
+    void push(float strength, uint32_t steps, size_t cell) {
+        // 正 float 的位序与数值顺序相同。最宽路径优先，同宽时最短路径优先。
+        const uint32_t descending = 0x7fffffffu ^ __builtin_bit_cast(uint32_t, strength);
+        const uint64_t priority = ((uint64_t)descending << kStepBits) | steps;
+        heap[heapSize++] = {priority, cell, 0};
+        link(heapSize);
     }
 
-private:
-    static constexpr size_t kWindow = 512;
-    static constexpr size_t kHop = 128;
-    static constexpr size_t kBins = kWindow / 2 + 1;
-    FftCore fft;
-    float window[kWindow];
-    float ring[2][kWindow];
-    float frame[kWindow];
-    float spectrum[kWindow + 2];
-    float power[kBins];
-    float previousMagnitude[kBins];
-    float peakBandConfidence[kFluxBands];
-    float detectedBandConfidence[kFluxBands];
-    size_t write = 0;
-    size_t samplesUntilFrame = kWindow;
-    float pastFlux = 0.0f;
-    float peakFlux = 0.0f;
-    float peakThreshold = 0.0f;
-    float background = 0.0f;
-    double nextOnset = 0.0;
-
-    void measurePower() {
-        for (size_t bin = 0; bin < kBins; ++bin) power[bin] = 0.0f;
-        for (const auto& channel : ring) {
-            bool audible = false;
-            for (size_t i = 0; i < kWindow; ++i) {
-                const float sample = channel[(write + i) % kWindow];
-                audible |= sample != 0.0f;
-                frame[i] = sample * window[i];
+    Entry pop() {
+        // 每条边只会降低强度或增加步数，因此入堆优先级单调，可用基数堆。
+        if (buckets[0] == 0) {
+            const size_t bucket = __builtin_ctzll(occupied);
+            const size_t first = buckets[bucket];
+            lastPriority = heap[first - 1].priority;
+            for (size_t index = heap[first - 1].next; index != 0; index = heap[index - 1].next) {
+                if (heap[index - 1].priority < lastPriority) lastPriority = heap[index - 1].priority;
             }
-            if (!audible) continue;
-            fft.forward(frame, spectrum, kBins);
-            for (size_t bin = 1; bin < kBins; ++bin) {
-                const float re = spectrum[2 * bin], im = spectrum[2 * bin + 1];
-                power[bin] += re * re + im * im;
+            buckets[bucket] = 0;
+            occupied &= ~(1ull << bucket);
+            for (size_t index = first; index != 0;) {
+                const size_t next = heap[index - 1].next;
+                link(index);
+                index = next;
+            }
+        }
+        const Entry result = heap[buckets[0] - 1];
+        buckets[0] = result.next;
+        if (buckets[0] == 0) occupied &= ~1ull;
+        return result;
+    }
+
+    void expand(size_t row, size_t bin, float phase, float sourceStrength, uint32_t steps) {
+        RtpghiFrame& target = *solveFrames[row];
+        if (!target.pending[bin]) return;
+        const float magnitude = target.magnitude[bin];
+        const float strength = magnitude < sourceStrength ? magnitude : sourceStrength;
+        if (strength < target.strength[bin] ||
+            (strength == target.strength[bin] && steps >= target.steps[bin])) return;
+        target.strength[bin] = strength;
+        target.steps[bin] = steps;
+        target.phase[bin] = wrapToPi(phase);
+        push(strength, steps, (row << kBinBits) | bin);
+    }
+
+    void startPropagation(size_t overlap) {
+        // 先完成正在回溯的窗口，再为新锚点选取积分范围。
+        drain(kMaxEntries);
+        solveCount = count < overlap ? count : overlap;
+        solveHead = (head + count - solveCount) % kRtpghiFrames;
+        float peak = 0.0f;
+        bool stretched = false;
+        for (size_t row = 0; row < solveCount; ++row) {
+            RtpghiFrame& source = frames[(solveHead + row) % kRtpghiFrames];
+            solveFrames[row] = &source;
+            if (source.peak > peak) peak = source.peak;
+            stretched |= source.stretched;
+        }
+        if (!stretched) return;
+        const float threshold = kRtpghiMagnitudeTolerance * peak;
+        heapSize = 0;
+        for (size_t& bucket : buckets) bucket = 0;
+        occupied = lastPriority = 0;
+        for (size_t row = 0; row < solveCount; ++row) {
+            RtpghiFrame& source = *solveFrames[row];
+            // 最新帧的逐帧积分结果已作为后续传播的起点。
+            const bool currentLocalAnchor = row + 1 == solveCount && source.anchor == RtpghiAnchor::Local;
+            for (size_t bin = 0; bin < source.bins; ++bin) {
+                const bool audible = source.magnitude[bin] > threshold;
+                const bool anchor = source.anchor == RtpghiAnchor::Frame ||
+                    (source.anchor == RtpghiAnchor::Local && source.anchorBins[bin]);
+                source.pending[bin] = audible && !source.locked && !currentLocalAnchor && !anchor;
+                source.strength[bin] = 0.0f;
+                source.steps[bin] = 0;
+                if (audible && anchor) push(source.magnitude[bin], 0, (row << kBinBits) | bin);
+            }
+        }
+    }
+
+    void drain(size_t budget) {
+        while (occupied != 0 && budget != 0) {
+            --budget;
+            const Entry entry = pop();
+            const uint32_t bits = 0x7fffffffu ^ (uint32_t)(entry.priority >> kStepBits);
+            const float strength = __builtin_bit_cast(float, bits);
+            const uint32_t steps = (uint32_t)(entry.priority & kStepMask);
+            const size_t row = entry.cell >> kBinBits;
+            const size_t bin = entry.cell & kBinMask;
+            RtpghiFrame& source = *solveFrames[row];
+            if (steps != 0 && (!source.pending[bin] ||
+                strength != source.strength[bin] || steps != source.steps[bin])) continue;
+
+            source.pending[bin] = false;
+            const float phase = source.phase[bin];
+            if (bin > 0) expand(row, bin - 1, phase - source.frequencyEdge[bin], strength, steps + 1);
+            if (bin + 1 < source.bins) {
+                expand(row, bin + 1, phase + source.frequencyEdge[bin + 1], strength, steps + 1);
+            }
+            if (row + 1 < solveCount) {
+                const RtpghiFrame& next = *solveFrames[row + 1];
+                if (bin < next.bins) expand(row + 1, bin, phase + next.timeEdge[bin], strength, steps + 1);
+            }
+            if (row > 0 && bin < solveFrames[row - 1]->bins) {
+                expand(row - 1, bin, phase - source.timeEdge[bin], strength, steps + 1);
             }
         }
     }
@@ -632,6 +700,8 @@ private:
 // ------------------------------------------------------------
 class Shifter {
 public:
+    RtpghiHistory& rtpghi;
+
     // 参数
     float sampleRate = 48000.0f;
     size_t hopSize = 512;
@@ -651,9 +721,9 @@ public:
         // 升调保留原始分析时基，降调在输入和输出两端分摊。
         return currentRatio < 1.0f ? sqrtf(currentRatio) : 1.0f;
     }
-    int transientMode = 1; // DSPark
+    bool transientDetection = true;
     bool firstFrame = true;
-    bool jointPhase = false;
+    PhaseIntegration phaseIntegration = PhaseIntegration::Pghi;
     JointPhaseFrame jointFrames[kJointFrames];
     size_t jointHead = 0;
     size_t jointCount = 0;
@@ -664,7 +734,9 @@ public:
     double jointOnsets[kMaxTransientMarks];
     size_t jointOnsetRead = 0;
     size_t jointOnsetWrite = 0;
-    double jointMark = -1.0;
+    float transientEndSlope = 0.0f;
+    size_t transientSamplesLeft = 0;
+    bool transientPeakBins[kMaxBins];
 
     // FFT
     FftCore fft;
@@ -702,7 +774,12 @@ public:
     float previousMag[kMaxBins];
 
     // PGHI 堆
-    unsigned char processedBins[kMaxBins];
+    enum class PghiBinState : unsigned char {
+        Pending,
+        Propagated,
+        Reset,
+    };
+    PghiBinState processedBins[kMaxBins];
     struct HeapEntry {
         float magnitude;
         uint32_t binAndFrame;
@@ -767,12 +844,6 @@ public:
     size_t totalColumns = 0;
     double marks[kMaxTransientMarks];
     size_t markCount = 0;
-    double pendingOnsets[kMaxTransientMarks];
-    float onsetBandConfidence[kMaxTransientMarks][kFluxBands];
-    double lastCorrectionMark = -1.0;
-    size_t onsetRead = 0;
-    size_t onsetWrite = 0;
-
     // --------------------------------------------------------
     void init(float sr, size_t hop, int win) {
         sampleRate = sr;
@@ -864,6 +935,18 @@ public:
             const float t = (float)n / (float)detWindowSize;
             detWindow[n] = 0.5f * (1.0f - cosf(twopi * t));
         }
+
+        // Röbel §2.2 的 Ce 取当前分析窗下、从窗左缘开始的线性振幅斜坡的能量重心。
+        // 这里换算成相邻频点对应的相位斜率，供峰区积分直接比较。
+        double rampEnergy = 0.0;
+        double rampMoment = 0.0;
+        for (size_t n = 0; n < L; ++n) {
+            const double amplitude = (double)n * window[n];
+            const double energy = amplitude * amplitude;
+            rampEnergy += energy;
+            rampMoment += ((double)n - (double)halfWindow) * energy;
+        }
+        transientEndSlope = (float)(rampMoment / rampEnergy * (double)twopi / (double)frameSize);
     }
 
     void buildSincTable() {
@@ -933,9 +1016,10 @@ public:
         synthesisSamplesToFrame = 0.0f;
         analysisStarted = false;
         synthesisFrameStart = 0;
+        rtpghi.head = rtpghi.count = 0;
+        rtpghi.occupied = 0;
         jointHead = jointCount = jointPreviousBins = 0;
         jointOnsetRead = jointOnsetWrite = 0;
-        jointMark = -1.0;
         synthesisAvailable = 0;
         synthesisClearedUntil = 0;
         resamplePosition = 0.0;
@@ -951,8 +1035,6 @@ public:
         totalColumns = 0;
         for (size_t i = 0; i < kMaxTransientMarks; ++i) marks[i] = 0.0;
         markCount = 0;
-        onsetRead = onsetWrite = 0;
-        lastCorrectionMark = -1.0;
 
         resetPhaseState();
     }
@@ -972,6 +1054,7 @@ public:
         dsfluxFilled = 0;
         dsfluxWindow = kDsFluxReferenceWindow;
         dsfluxCooldown = 0;
+        transientSamplesLeft = 0;
         firstFrame = true;
     }
 
@@ -998,11 +1081,10 @@ public:
         if (!analysisStarted) currentRatio = targetRatio;
     }
 
-    void setTransientMode(int mode) {
-        if (transientMode == mode) return;
-        transientMode = mode;
-        onsetRead = onsetWrite = 0;
-        lastCorrectionMark = -1.0;
+    void setTransientDetection(bool enabled) {
+        if (transientDetection == enabled) return;
+        transientDetection = enabled;
+        jointOnsetRead = jointOnsetWrite = 0;
         resetPhaseState();
     }
 
@@ -1047,6 +1129,7 @@ public:
             advanceAnalysis(inputResamplePosition, inputStep * outputStep);
             inputResamplePosition += (double)inputStep;
         }
+        if (rtpghi.occupied != 0) rtpghi.drain(kRtpghiStepsPerSample);
         return renderOutputSample(outputStep);
     }
 
@@ -1071,32 +1154,6 @@ public:
         }
     }
 
-    void queueOnset(double position, const float* bands) {
-        if (onsetWrite - onsetRead == kMaxTransientMarks) ++onsetRead;
-        const size_t index = onsetWrite++ % kMaxTransientMarks;
-        pendingOnsets[index] = position;
-        if (bands) {
-            for (size_t band = 0; band < kFluxBands; ++band) onsetBandConfidence[index][band] = bands[band];
-        }
-    }
-
-    bool consumeOnsets() {
-        if (onsetRead == onsetWrite) return false;
-        const size_t center = (inputWrite + halfWindow) % windowSize;
-        // 以相邻主窗中心的中点为分界，已经确认且较早的起音由此帧接收。
-        const double halfSourceHop = 0.5 * (double)hopSize * inputResampleStep() / currentRatio;
-        const double end = inputSourcePositions[center] + halfSourceHop;
-        bool reset = false;
-        while (onsetRead != onsetWrite) {
-            const double onset = pendingOnsets[onsetRead % kMaxTransientMarks];
-            if (onset > end) break;
-            putTransientMark(onset);
-            ++onsetRead;
-            reset = true;
-        }
-        return reset;
-    }
-
     void queueJointOnset(double onset) {
         if (jointOnsetWrite - jointOnsetRead == kMaxTransientMarks) ++jointOnsetRead;
         jointOnsets[jointOnsetWrite++ % kMaxTransientMarks] = onset;
@@ -1116,23 +1173,69 @@ public:
             if (next + onset >= 2.0 * center) break;
             onset = next;
         }
-        if (transientMode == 0 && jointMark != onset) {
-            putTransientMark(onset);
-            jointMark = onset;
-        }
         return onset - center;
     }
 
+    float analysisWindowCenterPhase() const {
+        return windowType == 2 ? 6.283185307179586f * (float)halfWindow / (float)frameSize : 0.0f;
+    }
+
+    bool collectTransientPeakBins(size_t bins, size_t analysisHop) {
+        // Röbel §2–3，以谱谷界定峰区，用幅度平方加权的群延迟估计每个峰区的重心。
+        // https://www.dafx.de/paper-archive/2003/pdfs/dafx32.pdf
+        constexpr double kPeakStartFactor = 2.0;
+        float peak = 0.0f;
+        for (size_t bin = 0; bin < bins; ++bin) {
+            if (currentMag[bin] > peak) peak = currentMag[bin];
+        }
+        const float floor = kRtpghiMagnitudeTolerance * peak;
+        const float center = analysisWindowCenterPhase();
+        double selectedEnergy = 0.0;
+        double leadingEnergy = 0.0;
+        double peakEnergy = 0.0;
+        double peakMoment = 0.0;
+        size_t begin = 0;
+        for (size_t bin = 1; bin < bins; ++bin) {
+            const double left = currentMag[bin - 1];
+            const double right = currentMag[bin];
+            const double weight = left * left + right * right;
+            const float slope = wrapToPi(currentAnalysisPhase[bin - 1] - currentAnalysisPhase[bin] - center);
+            peakEnergy += weight;
+            peakMoment += weight * slope;
+            const bool valley = bin + 1 < bins && right <= left && right < currentMag[bin + 1];
+            if (!valley && bin + 1 != bins) continue;
+
+            const double endMoment = transientEndSlope * peakEnergy;
+            const bool emerging = peakMoment > kPeakStartFactor * endMoment;
+            for (size_t k = begin; k <= bin; ++k) {
+                const double magnitude = currentMag[k];
+                if (magnitude <= floor) continue;
+                transientPeakBins[k] |= emerging;
+                if (!transientPeakBins[k]) continue;
+                const double energy = magnitude * magnitude;
+                selectedEnergy += energy;
+                if (peakMoment > endMoment) leadingEnergy += energy;
+            }
+            begin = bin + 1;
+            peakEnergy = peakMoment = 0.0;
+        }
+
+        // 等多数已选峰区的能量接近窗中心，再在同一帧重置。
+        const bool ready = selectedEnergy > 0.0 && 2.0 * leadingEnergy < selectedEnergy;
+        transientSamplesLeft = ready || analysisHop >= transientSamplesLeft ? 0 : transientSamplesLeft - analysisHop;
+        if (ready) {
+            for (size_t bin = 0; bin < bins; ++bin) {
+                transientPeakBins[bin] &= currentMag[bin] > floor;
+            }
+        }
+        return ready;
+    }
+
     void processFrame(size_t analysisHop) {
-        const bool shortFluxReset = transientMode == 2 && consumeOnsets();
         currentRatio += 0.25f * (targetRatio - currentRatio);
-        const size_t correction = transientMode == kLocalPhaseMode && onsetRead != onsetWrite
-            ? selectPhaseCorrection() : kMaxTransientMarks;
-        const double jointOffset = jointPhase && jointOnsetRead != jointOnsetWrite
-            ? jointSourceOffset() : (double)kMaxFft;
         if (silentSamples == windowSize) {
             if (!firstFrame) resetPhaseState();
-            completeSynthesisFrame(0, true, jointOffset);
+            completeSynthesisFrame(0, analysisHop, true, RtpghiAnchor::None);
             return;
         }
 
@@ -1140,11 +1243,22 @@ public:
         const float outputStep = currentRatio / inputResampleStep();
         const float band = outputStep > 1.25f ? 1.25f / outputStep : 1.0f;
         const size_t activeBins = 1 + (size_t)((float)(numBins - 1) * band);
-        const bool detect = transientMode == 1 && !firstFrame && detectorActiveBins != 0;
+        const bool detect = transientDetection && !firstFrame && detectorActiveBins != 0;
+        const bool useLocalReset = phaseIntegration == PhaseIntegration::BidirectionalLocalReset;
         transformWindow(window, fftOutput, activeBins);
         analyseSpectrum(activeBins);
+        size_t detectorOffset = 0;
         if (detect) {
-            windowInput(detWindow, detWindowSize, detInput);
+            if (phaseIntegration == PhaseIntegration::Joint) {
+                // 检测窗向前取样，为重置帧之后的联合积分帧提供起音坐标。
+                const size_t maxOffset = windowSize - detWindowSize;
+                const size_t ahead = maxOffset / 2 + jointShortSize / 4;
+                detectorOffset = ahead < maxOffset ? ahead : maxOffset;
+            } else if (useLocalReset) {
+                // 在起音穿过主分析窗中心之前开启峰区收集。
+                detectorOffset = windowSize - detWindowSize;
+            }
+            windowInput(detWindow, detWindowSize, detInput, detectorOffset);
             detFft.forward(detInput, detOutput, detectorActiveBins);
             for (size_t bin = 0; bin < detectorActiveBins; ++bin) {
                 detMag[bin] = hypotf(detOutput[2 * bin], detOutput[2 * bin + 1]);
@@ -1152,27 +1266,32 @@ public:
         }
 
         const bool dsparkReset = detect && detectDsParkTransient(analysisHop);
-        const bool locked = firstFrame || shortFluxReset || dsparkReset;
+        const bool frameReset = dsparkReset && !useLocalReset;
+        const bool locked = firstFrame || frameReset;
+        RtpghiAnchor anchor = frameReset ? RtpghiAnchor::Frame : RtpghiAnchor::None;
+        if (dsparkReset) {
+            const size_t center = (inputWrite + detectorOffset + (detWindowSize >> 1)) % windowSize;
+            const double onset = inputSourcePositions[center];
+            putTransientMark(onset);
+            if (phaseIntegration == PhaseIntegration::Joint) queueJointOnset(onset);
+            if (useLocalReset && transientSamplesLeft == 0) {
+                transientSamplesLeft = windowSize;
+                for (bool& selected : transientPeakBins) selected = false;
+            }
+        }
         if (locked) {
             for (size_t bin = 0; bin < activeBins; ++bin) currentSynthPhase[bin] = currentAnalysisPhase[bin];
-            if (dsparkReset) {
-                const size_t center = (inputWrite + (detWindowSize >> 1)) % windowSize;
-                putTransientMark(inputSourcePositions[center]);
-            }
         } else {
             for (size_t bin = previousActiveBins; bin < activeBins; ++bin) {
                 previousMag[bin] = 0.0f;
                 previousAnalysisPhase[bin] = currentAnalysisPhase[bin];
                 previousSynthPhase[bin] = currentAnalysisPhase[bin];
             }
-            propagatePghi(analysisHop, activeBins);
+            const bool localReset = transientSamplesLeft != 0 && collectTransientPeakBins(activeBins, analysisHop);
+            if (propagatePghi(analysisHop, activeBins, localReset)) anchor = RtpghiAnchor::Local;
         }
 
-        synthesizeSpectrum(activeBins);
-        if (correction != kMaxTransientMarks && currentRatio != 1.0f) {
-            correctTransientPhase(activeBins, outputStep, correction);
-        }
-        completeSynthesisFrame(activeBins, locked, jointOffset);
+        completeSynthesisFrame(activeBins, analysisHop, locked, anchor);
 
         for (size_t bin = 0; bin < activeBins; ++bin) {
             previousAnalysisPhase[bin] = currentAnalysisPhase[bin];
@@ -1329,14 +1448,65 @@ public:
         }
     }
 
-    void completeSynthesisFrame(size_t bins, bool locked, double jointOffset) {
+    void completeRtpghiFrame(uint64_t start, size_t bins, size_t analysisHop, bool locked, RtpghiAnchor anchor) {
+        RtpghiFrame& next = rtpghi.frame(rtpghi.count++);
+        next.start = start;
+        next.bins = bins;
+        next.locked = locked;
+        next.anchor = anchor;
+        next.stretched = bins != 0 && analysisHop != hopSize;
+        next.peak = 0.0f;
+
+        // 与逐帧 PGHI 共用同一套直接差分，并保留每帧实际的分析 hop。
+        const float stretch = (float)hopSize / (float)analysisHop;
+        const float analysisScale = 6.283185307179586f * (float)analysisHop / (float)frameSize;
+        const float synthesisScale = 6.283185307179586f * (float)hopSize / (float)frameSize;
+        const float center = analysisWindowCenterPhase();
+        for (size_t bin = 0; bin < bins; ++bin) {
+            next.magnitude[bin] = currentMag[bin];
+            next.phase[bin] = currentSynthPhase[bin];
+            if (currentMag[bin] > next.peak) next.peak = currentMag[bin];
+            const float expected = analysisScale * (float)bin;
+            const float residual = wrapToPi(currentAnalysisPhase[bin] - previousAnalysisPhase[bin] - expected);
+            next.timeEdge[bin] = synthesisScale * (float)bin + stretch * residual;
+        }
+        for (size_t bin = 1; bin < bins; ++bin) {
+            const float delta = wrapToPi(currentAnalysisPhase[bin] - currentAnalysisPhase[bin - 1] + center);
+            next.frequencyEdge[bin] = stretch * delta - center;
+        }
+        if (anchor == RtpghiAnchor::Local) {
+            for (size_t bin = 0; bin < bins; ++bin) {
+                next.anchorBins[bin] = processedBins[bin] == PghiBinState::Reset;
+            }
+        }
+
+        if (anchor != RtpghiAnchor::None) rtpghi.startPropagation(overlap);
+        // 保留重叠的历史帧，再留两个 hop 把堆传播摊到多个音频量子。
+        if (rtpghi.count < overlap + kRtpghiSolveAhead) return;
+        if (rtpghi.head == rtpghi.solveHead) rtpghi.drain(RtpghiHistory::kMaxEntries);
+        const RtpghiFrame& ready = rtpghi.frame(0);
+        if (ready.bins != 0) synthesizeSpectrum(ready.magnitude, ready.phase, ready.bins);
+        renderSynthesisFrame(ready.start, ready.bins != 0);
+        rtpghi.head = (rtpghi.head + 1) % kRtpghiFrames;
+        --rtpghi.count;
+    }
+
+    void completeSynthesisFrame(size_t bins, size_t analysisHop, bool locked, RtpghiAnchor anchor) {
         const uint64_t start = synthesisFrameStart;
         synthesisFrameStart += hopSize;
-        if (!jointPhase) {
+        if (phaseIntegration == PhaseIntegration::Bidirectional ||
+            phaseIntegration == PhaseIntegration::BidirectionalLocalReset) {
+            completeRtpghiFrame(start, bins, analysisHop, locked, anchor);
+            return;
+        }
+        if (bins != 0) synthesizeSpectrum(currentMag, currentSynthPhase, bins);
+        if (phaseIntegration == PhaseIntegration::Pghi) {
             renderSynthesisFrame(start, bins != 0);
             return;
         }
 
+        const double jointOffset = bins != 0 && jointOnsetRead != jointOnsetWrite
+            ? jointSourceOffset() : (double)kMaxFft;
         JointPhaseFrame& next = jointFrame(jointCount++);
         next.start = start;
         next.bins = bins;
@@ -1378,50 +1548,57 @@ public:
         --jointCount;
     }
 
-    void propagatePghi(size_t analysisHop, size_t activeBins) {
-        for (size_t bin = 0; bin < activeBins; ++bin) processedBins[bin] = 0;
+    bool propagatePghi(size_t analysisHop, size_t activeBins, bool localReset) {
+        for (size_t bin = 0; bin < activeBins; ++bin) processedBins[bin] = PghiBinState::Pending;
         heapSize = 0;
         for (size_t bin = 0; bin < activeBins; ++bin) {
             heapPush(previousMag[bin], (uint32_t)bin, true);
         }
-
         const float analysisScale = 6.283185307179586f * (float)analysisHop / (float)frameSize;
         const float synthesisScale = 6.283185307179586f * (float)hopSize / (float)frameSize;
         const float stretchRatio = (float)hopSize / (float)analysisHop;
         // 自然顺序窗的中心在 N/2。频率梯度先扣除这段线性相位，再按伸缩率传播。
-        const float windowCenterPhase = windowType == 2
-            ? 6.283185307179586f * (float)halfWindow / (float)frameSize : 0.0f;
+        const float windowCenterPhase = analysisWindowCenterPhase();
+        bool hasLocalAnchor = false;
         size_t processedCount = 0;
         while (processedCount < activeBins && heapSize > 0) {
             heapPop();
             const size_t bin = popBin;
             const bool isPrev = popIsPrev;
             if (isPrev) {
-                if (processedBins[bin] != 0) continue;
-                const float expected = analysisScale * (float)bin;
-                const float residual = wrapToPi(currentAnalysisPhase[bin] - previousAnalysisPhase[bin] - expected);
-                currentSynthPhase[bin] = wrapToPi(previousSynthPhase[bin]
-                    + synthesisScale * (float)bin + stretchRatio * residual);
-                processedBins[bin] = 1;
+                if (processedBins[bin] != PghiBinState::Pending) continue;
+                // 只在入选峰区内重置堆实际选中的时间入口。
+                if (localReset && bin < previousActiveBins && transientPeakBins[bin]) {
+                    currentSynthPhase[bin] = currentAnalysisPhase[bin];
+                    processedBins[bin] = PghiBinState::Reset;
+                    hasLocalAnchor = true;
+                } else {
+                    const float expected = analysisScale * (float)bin;
+                    const float residual = wrapToPi(currentAnalysisPhase[bin] - previousAnalysisPhase[bin] - expected);
+                    currentSynthPhase[bin] = wrapToPi(previousSynthPhase[bin]
+                        + synthesisScale * (float)bin + stretchRatio * residual);
+                    processedBins[bin] = PghiBinState::Propagated;
+                }
                 ++processedCount;
                 heapPush(currentMag[bin], (uint32_t)bin, false);
                 continue;
             }
-            if (bin + 1 < activeBins && processedBins[bin + 1] == 0) {
+            if (bin + 1 < activeBins && processedBins[bin + 1] == PghiBinState::Pending) {
                 const float delta = wrapToPi(currentAnalysisPhase[bin + 1] - currentAnalysisPhase[bin] + windowCenterPhase);
                 currentSynthPhase[bin + 1] = wrapToPi(currentSynthPhase[bin] + stretchRatio * delta - windowCenterPhase);
-                processedBins[bin + 1] = 1;
+                processedBins[bin + 1] = PghiBinState::Propagated;
                 ++processedCount;
                 heapPush(currentMag[bin + 1], (uint32_t)(bin + 1), false);
             }
-            if (bin > 0 && processedBins[bin - 1] == 0) {
+            if (bin > 0 && processedBins[bin - 1] == PghiBinState::Pending) {
                 const float delta = wrapToPi(currentAnalysisPhase[bin - 1] - currentAnalysisPhase[bin] - windowCenterPhase);
                 currentSynthPhase[bin - 1] = wrapToPi(currentSynthPhase[bin] + stretchRatio * delta + windowCenterPhase);
-                processedBins[bin - 1] = 1;
+                processedBins[bin - 1] = PghiBinState::Propagated;
                 ++processedCount;
                 heapPush(currentMag[bin - 1], (uint32_t)(bin - 1), false);
             }
         }
+        return hasLocalAnchor;
     }
 
     void heapPush(float magnitude, uint32_t bin, bool isPrev) {
@@ -1527,9 +1704,9 @@ public:
         fft.forward(fftInput, spectrum, bins);
     }
 
-    void windowInput(const float* weights, size_t length, float* frame) const {
+    void windowInput(const float* weights, size_t length, float* frame, size_t offset = 0) const {
         for (size_t i = 0; i < length; ++i) {
-            frame[i] = inputRing[(inputWrite + i) % windowSize] * weights[i];
+            frame[i] = inputRing[(inputWrite + offset + i) % windowSize] * weights[i];
         }
     }
 
@@ -1541,131 +1718,16 @@ public:
         for (size_t i = halfWindow; i < frameSize - halfWindow; ++i) frame[i] = 0.0f;
     }
 
-    void synthesizeSpectrum(size_t activeBins) {
+    void synthesizeSpectrum(const float* magnitude, const float* phase, size_t activeBins) {
         for (size_t bin = 0; bin < activeBins; ++bin) {
             float sine, cosine;
-            sinCos(currentSynthPhase[bin], sine, cosine);
-            fftOutput[2 * bin] = currentMag[bin] * cosine;
-            fftOutput[2 * bin + 1] = currentMag[bin] * sine;
+            sinCos(phase[bin], sine, cosine);
+            fftOutput[2 * bin] = magnitude[bin] * cosine;
+            fftOutput[2 * bin + 1] = magnitude[bin] * sine;
         }
         for (size_t i = 2 * activeBins; i < frameSize + 2; ++i) fftOutput[i] = 0.0f;
         fftOutput[1] = 0.0f;
         fftOutput[2 * (numBins - 1) + 1] = 0.0f;
-    }
-
-    bool estimateBandDelay(PhaseCorrectionBand& band, float expected, float binWidth,
-                           float centerPhase, float search, float maxDeviation) const {
-        if (band.end - band.begin < 5) return false;
-        float peak = 0.0f;
-        for (size_t bin = band.begin; bin < band.end; ++bin) {
-            if (currentMag[bin] > peak) peak = currentMag[bin];
-        }
-        if (peak <= 1.0e-7f) return false;
-        float accepted = 0.0f, all = 0.0f, firstMoment = 0.0f, secondMoment = 0.0f;
-        size_t pairs = 0;
-        for (size_t bin = band.begin + 1; bin < band.end; ++bin) {
-            const float a = currentMag[bin - 1], b = currentMag[bin];
-            const float weight = a < b ? a : b;
-            if (weight < peak * 0.1f) continue;
-            all += weight;
-            const float delta = currentSynthPhase[bin] - currentSynthPhase[bin - 1] + centerPhase;
-            const float delay = -wrapToPi(delta + expected * binWidth) / binWidth;
-            if (fabsf(delay) > search) continue;
-            firstMoment += weight * delay;
-            secondMoment += weight * delay * delay;
-            accepted += weight;
-            ++pairs;
-        }
-        if (pairs < 4 || accepted < 0.6f * all) return false;
-        const float estimate = firstMoment / accepted;
-        if (secondMoment / accepted - estimate * estimate > maxDeviation * maxDeviation) return false;
-        band.delay = estimate;
-        band.confidence *= accepted / all;
-        return true;
-    }
-
-    void rotateCorrectedBand(const PhaseCorrectionBand& band, float shift, float binWidth) {
-        const float center = 0.5f * (float)(band.begin + band.end - 1);
-        const float fade = 0.15f * (float)(band.end - band.begin);
-        for (size_t bin = band.begin; bin < band.end; ++bin) {
-            const size_t left = bin - band.begin, right = band.end - bin - 1;
-            const float edge = (float)(left < right ? left : right) / fade;
-            const float taper = edge >= 1.0f ? 1.0f : edge * edge * (3.0f - 2.0f * edge);
-            // 以频带中心的相位为参照，平滑施加局部斜率，边界回到原相位。
-            const float phase = shift * binWidth * ((float)bin - center) * taper;
-            float sine, cosine;
-            sinCos(wrapToPi(phase), sine, cosine);
-            const float re = fftOutput[2 * bin], im = fftOutput[2 * bin + 1];
-            fftOutput[2 * bin] = re * cosine - im * sine;
-            fftOutput[2 * bin + 1] = re * sine + im * cosine;
-        }
-    }
-
-    size_t selectPhaseCorrection() {
-        const double sourceCenter = inputSourcePositions[(inputWrite + halfWindow) % windowSize];
-        const double radius = (double)sampleRate * 0.012;
-        while (onsetRead != onsetWrite && pendingOnsets[onsetRead % kMaxTransientMarks] < sourceCenter - radius) {
-            ++onsetRead;
-        }
-        if (onsetRead == onsetWrite) return kMaxTransientMarks;
-        size_t index = onsetRead % kMaxTransientMarks;
-        double onset = pendingOnsets[index];
-        if (onset > sourceCenter + radius) return kMaxTransientMarks;
-        for (size_t i = onsetRead + 1; i != onsetWrite; ++i) {
-            const size_t next = i % kMaxTransientMarks;
-            if (pendingOnsets[next] + onset >= 2.0 * sourceCenter) break;
-            index = next;
-            onset = pendingOnsets[index];
-        }
-
-        if (lastCorrectionMark != onset) {
-            putTransientMark(onset);
-            lastCorrectionMark = onset;
-        }
-        return index;
-    }
-
-    void correctTransientPhase(size_t bins, float outputStep, size_t index) {
-        const double sourceCenter = inputSourcePositions[(inputWrite + halfWindow) % windowSize];
-        const float expected = (float)(pendingOnsets[index] - sourceCenter) * outputStep;
-        const float search = 0.0025f * sampleRate * outputStep;
-        if (fabsf(expected) + search > (float)halfWindow) return;
-
-        const float binWidth = 6.283185307179586f / (float)frameSize;
-        const float centerPhase = windowType == 2 ? binWidth * (float)halfWindow : 0.0f;
-        const float bandWidth = 0.5f * (float)frameSize * inputResampleStep() / (float)kFluxBands;
-        const float deviation = 0.0006f * sampleRate * outputStep;
-        PhaseCorrectionBand reliable[kFluxBands];
-        float delays[kFluxBands];
-        size_t count = 0;
-        const size_t endBin = bins < numBins - 1 ? bins : numBins - 1;
-        for (size_t b = 0; b < kFluxBands; ++b) {
-            const float confidence = onsetBandConfidence[index][b];
-            if (confidence < 0.35f) continue;
-            const size_t begin = (size_t)ceilf((float)b * bandWidth) + 1;
-            const size_t next = (size_t)ceilf((float)(b + 1) * bandWidth) + 1;
-            if (begin >= endBin) break;
-            PhaseCorrectionBand band{begin, next < endBin ? next : endBin, 0.0f, confidence};
-            if (!estimateBandDelay(band, expected, binWidth, centerPhase, search, deviation)) continue;
-            reliable[count] = band;
-            size_t insert = count++;
-            while (insert > 0 && delays[insert - 1] > band.delay) {
-                delays[insert] = delays[insert - 1];
-                --insert;
-            }
-            delays[insert] = band.delay;
-        }
-        if (count < 3) return;
-
-        // 用可靠频带自身的中位到达时间作参照，避免把检测误差变成整次起音的平移。
-        const float reference = 0.5f * (delays[(count - 1) / 2] + delays[count / 2]);
-        for (size_t i = 0; i < count; ++i) {
-            const PhaseCorrectionBand& band = reliable[i];
-            const float difference = band.delay - reference;
-            if (fabsf(difference) < 0.0001f * sampleRate * outputStep) continue;
-            const float bounded = difference > deviation ? deviation : (difference < -deviation ? -deviation : difference);
-            rotateCorrectedBand(band, bounded * band.confidence, binWidth);
-        }
     }
 
     float sincWeight(float distance, float cutoff) const {
@@ -1728,9 +1790,9 @@ public:
 };
 
 // Mid 和 Side 使用独立的相位与瞬态状态，参数和帧时钟一致。
-Shifter g_mid;
-Shifter g_side;
-ShortFluxDetector g_shortFlux;
+RtpghiHistory g_rtpghi[2];
+Shifter g_mid{g_rtpghi[0]};
+Shifter g_side{g_rtpghi[1]};
 float g_in[2][kIoCapacity];
 float g_out[2][kIoCapacity];
 
@@ -1744,35 +1806,16 @@ extern "C" {
 void init(int sr, int hop, int win) {
     g_mid.init((float)sr, (size_t)hop, win);
     g_side.init((float)sr, (size_t)hop, win);
-    g_shortFlux.init();
 }
 
 void process(int frameCount) {
     if (frameCount <= 0 || (size_t)frameCount > kIoCapacity) return;
-    const bool localPhase = g_mid.transientMode == kLocalPhaseMode;
-    const bool resetWithFlux = localPhase || g_mid.transientMode == 2;
-    const bool useShortFlux = resetWithFlux || g_mid.jointPhase;
-    const double cooldownSamples = (double)g_mid.cooldownMs * g_mid.sampleRate / 1000.0;
     for (int i = 0; i < frameCount; ++i) {
         const float left = g_in[0][i];
         const float right = g_in[1][i];
         g_mid.updateEnvelope(left, right);
         const float midInput = 0.5f * (left + right);
         const float sideInput = 0.5f * (left - right);
-        if (useShortFlux) {
-            const double onset = g_shortFlux.push(midInput, sideInput, g_mid.inputPosition, cooldownSamples, localPhase);
-            if (onset >= 0.0) {
-                if (resetWithFlux) {
-                    const float* bands = localPhase ? g_shortFlux.onsetBands() : nullptr;
-                    g_mid.queueOnset(onset, bands);
-                    g_side.queueOnset(onset, bands);
-                }
-                if (g_mid.jointPhase) {
-                    g_mid.queueJointOnset(onset);
-                    g_side.queueJointOnset(onset);
-                }
-            }
-        }
         const float mid = g_mid.processSample(midInput);
         const float side = g_side.processSample(sideInput);
         g_out[0][i] = mid + side;
@@ -1785,17 +1828,18 @@ void set_pitch_shift(float semitones) {
     g_side.setPitchShift(semitones);
 }
 void set_transient_mode(int mode) {
-    if ((mode == 2 || mode == kLocalPhaseMode) && g_mid.transientMode != mode) g_shortFlux.reset();
-    g_mid.setTransientMode(mode);
-    g_side.setTransientMode(mode);
+    g_mid.setTransientDetection(mode == 1);
+    g_side.setTransientDetection(mode == 1);
 }
 void set_phase_integration(int mode) {
-    const bool joint = mode == 1;
-    if (g_mid.jointPhase == joint) return;
-    g_mid.jointPhase = g_side.jointPhase = joint;
+    PhaseIntegration integration = PhaseIntegration::Pghi;
+    if (mode == 1) integration = PhaseIntegration::Joint;
+    if (mode == 2) integration = PhaseIntegration::Bidirectional;
+    if (mode == 3) integration = PhaseIntegration::BidirectionalLocalReset;
+    if (g_mid.phaseIntegration == integration) return;
+    g_mid.phaseIntegration = g_side.phaseIntegration = integration;
     g_mid.reset();
     g_side.reset();
-    g_shortFlux.reset();
 }
 void set_cooldown_ms(float ms) {
     g_mid.setCooldownMs(ms);
@@ -1804,12 +1848,10 @@ void set_cooldown_ms(float ms) {
 void reinit(int hop, int win) {
     g_mid.reinit((size_t)hop, win);
     g_side.reinit((size_t)hop, win);
-    g_shortFlux.reset();
 }
 void reset() {
     g_mid.reset();
     g_side.reset();
-    g_shortFlux.reset();
 }
 
 float* in_ptr() { return g_in[0]; }

@@ -1,5 +1,11 @@
 const dspPages = [
   {
+    update_date: "2026-11-25",
+    title: "RTPGHI 双向相位积分可视化",
+    href: "dsp/rtpghi/index.html",
+    img: "dsp/rtpghi/preview.png",
+  },
+  {
     update_date: "2026-11-22",
     title: "实时 pbshift 移调器",
     href: "dsp/pbshift/index.html",

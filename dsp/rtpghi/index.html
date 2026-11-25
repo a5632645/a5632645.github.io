@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTPGHI 相位积分可视化</title>
+
+    <link rel="stylesheet" href="../../main.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        /* ---- Win95 controls (same family as the PGHI page) ---- */
+        .win-panel {
+            background-color: #c0c0c0;
+            border: 1px solid #808080;
+            box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #404040;
+            padding: 8px 10px;
+            margin: 8px 0;
+        }
+
+        .win-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #000060;
+            margin-bottom: 8px;
+            font-family: Consolas, monospace;
+            letter-spacing: .5px;
+        }
+
+        .win-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .win-row:last-child { margin-bottom: 0; }
+
+        .win-label {
+            font-size: 12px;
+            color: #1a1a1a;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .win-select {
+            font-size: 12px;
+            font-family: Consolas, monospace;
+            padding: 1px 4px;
+        }
+
+        .win-range { width: 150px; accent-color: #000060; }
+
+        .win-val {
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            color: #1a1a1a;
+            min-width: 52px;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .status-on { background-color: #2f9e6b; }
+        .status-off { background-color: #e1ac4a; }
+        .status-err { background-color: #b03030; }
+
+        .status-line {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            font-family: Consolas, monospace;
+            font-size: 12px;
+        }
+
+        .busy-track {
+            height: 6px;
+            background: #808080;
+            border: 1px solid #404040;
+            margin: 6px 0 0;
+            display: none;
+        }
+
+        .busy-fill {
+            height: 100%;
+            width: 0%;
+            background: #000080;
+            transition: width .15s linear;
+        }
+
+        /* ---- flow ---- */
+        .flow-strip {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin: 10px 0 4px;
+        }
+
+        .flow-step {
+            flex: 1 1 150px;
+            background: #c0c0c0;
+            border: 2px outset #ffffff;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            padding: 5px 7px;
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            color: #333;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .flow-step .num {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            line-height: 16px;
+            text-align: center;
+            background: #808080;
+            color: #fff;
+            font-size: 10px;
+            margin-right: 4px;
+        }
+
+        .flow-step.on {
+            border-style: inset;
+            border-color: #808080 #ffffff #ffffff #808080;
+            background: #dbe6f6;
+            color: #000060;
+            font-weight: bold;
+        }
+
+        .flow-step.on .num { background: #000080; }
+        .flow-step.done { background: #dff0df; }
+        .flow-step.done .num { background: #2f7a4b; }
+
+        .caption {
+            min-height: 3em;
+            margin: 6px 0 0;
+            font-size: 12px;
+            line-height: 1.65;
+            color: #1a1a1a;
+        }
+
+        .caption b { color: #000060; }
+
+        /* ---- visualization panels ---- */
+        .viz-panel {
+            background: #0b0f14;
+            border: 1px solid #2e3238;
+            margin: 8px 0;
+        }
+
+        .viz-head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 4px 8px;
+            background: #161c24;
+            border-bottom: 1px solid #2e3238;
+            color: #9fb0c0;
+            font-family: Consolas, monospace;
+            font-size: 11px;
+        }
+
+        .viz-head b { color: #e3edf6; font-weight: normal; }
+
+        canvas.viz {
+            display: block;
+            width: 100%;
+            background: #0b0f14;
+            cursor: crosshair;
+        }
+
+        #waveCanvas { height: 170px; }
+        #tfCanvas { height: 330px; }
+        #zoomCanvas { height: 360px; }
+
+        .viz-tools {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 14px;
+            padding: 6px 8px;
+            background: #c0c0c0;
+        }
+
+        .viz-tools label {
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .reveal-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1 1 320px;
+        }
+
+        .reveal-row input[type="range"] { flex: 1; accent-color: #000060; }
+
+        .legend-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 18px;
+            padding: 6px 8px;
+            background: #161c24;
+            border-top: 1px solid #2e3238;
+            color: #9fb0c0;
+            font-family: Consolas, monospace;
+            font-size: 11px;
+        }
+
+        .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+
+        .swatch {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border: 1px solid rgba(255, 255, 255, .55);
+        }
+
+        .swatch.anchor { background: #38e1d0; transform: rotate(45deg); }
+        .swatch.seed { background: #c98bff; border-radius: 50%; }
+        .swatch.frontier { background: #ffd34d; }
+        .swatch.parent { background: #ffef8a; }
+
+        .phase-legend {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: auto;
+        }
+
+        .phase-gradient {
+            width: 150px;
+            height: 10px;
+            border: 1px solid #555;
+            background: linear-gradient(90deg,
+                hsl(0, 80%, 55%), hsl(60, 80%, 55%), hsl(120, 80%, 55%),
+                hsl(180, 80%, 55%), hsl(240, 80%, 55%), hsl(300, 80%, 55%), hsl(360, 80%, 55%));
+        }
+
+        .readout {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+            gap: 4px 12px;
+            padding: 8px 10px;
+            background: #161c24;
+            border-top: 1px solid #2e3238;
+            color: #aebdca;
+            font-family: Consolas, monospace;
+            font-size: 11px;
+            line-height: 1.55;
+            min-height: 3.2em;
+        }
+
+        .readout b { color: #e3edf6; font-weight: normal; }
+        .readout .hl { color: #ffd34d; }
+        .readout .muted { color: #66788a; }
+
+        .stat-line {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 6px;
+            margin: 8px 0;
+        }
+
+        .stat-card {
+            background: #eeeeee;
+            border: 1px solid #808080;
+            box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #404040;
+            padding: 6px 8px;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        .stat-card span {
+            display: block;
+            color: #555;
+            font-family: Consolas, monospace;
+        }
+
+        .stat-card b {
+            font-family: Consolas, monospace;
+            font-size: 13px;
+            color: #000060;
+        }
+
+        .table-scroll {
+            overflow-x: auto;
+        }
+
+        .metric-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: Consolas, monospace;
+            font-size: 11px;
+        }
+
+        .metric-table th,
+        .metric-table td {
+            padding: 4px 6px;
+            text-align: right;
+            border: 1px solid #999;
+            white-space: nowrap;
+        }
+
+        .metric-table th:first-child,
+        .metric-table td:first-child,
+        .metric-table th:nth-child(2),
+        .metric-table td:nth-child(2) { text-align: left; }
+
+        .metric-table tr.selected td {
+            background: #fff4c8;
+            font-weight: bold;
+        }
+
+        .metric-table tr.selected td:first-child::before {
+            content: "▶ ";
+            color: #000080;
+        }
+
+        .metric-note {
+            font-size: 12px;
+            color: #333;
+            line-height: 1.7;
+            margin: 8px 0 0;
+        }
+
+        .metric-note code { background: #e4e4e4; padding: 0 3px; }
+
+        .algo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 10px;
+        }
+
+        .algo-card {
+            background: #eeeeee;
+            border: 1px solid #808080;
+            box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #404040;
+            padding: 8px 10px;
+            line-height: 1.7;
+            font-size: 12px;
+        }
+
+        .algo-card h4 {
+            margin: 0 0 6px;
+            font-size: 12px;
+            color: #000060;
+            font-family: Consolas, monospace;
+        }
+
+        .formula-block {
+            background: #f6f6f6;
+            border: 1px solid #aaa;
+            padding: 6px 8px;
+            margin: 6px 0;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+
+        .section_content h4 { margin: 12px 0 4px; }
+
+        .reference-list { line-height: 1.9; font-size: 12px; }
+
+        .small-note {
+            color: #555;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 767px) {
+            #tfCanvas { height: 270px; }
+            #zoomCanvas { height: 300px; }
+            .win-range { width: 110px; }
+            .flow-step { flex-basis: 120px; }
+            .phase-legend { margin-left: 0; }
+        }
+    </style>
+</head>
+
+<body class="page">
+    <div class="page-header">
+        <button onclick="window.location.href='../../index.html'">back</button>
+        <b>RTPGHI · 双向相位积分可视化</b>
+    </div>
+    <div class="page-body">
+        <main class="page-content">
+
+            <!-- ============================================================ -->
+            <section>
+                <h3 class="section-title">交互演示</h3>
+                <div class="section_content">
+                    <p>
+                        这是 <code>qwqdsp/labs/rtpghi</code> 中离线 RTPGHI 实验的浏览器端演示。
+                        STFT、相位差分、瞬态锚点、堆积分和 WOLA 合成直接在页面里计算，可观察逐帧传播与
+                        局部／全 STFT 堆的相位积分过程。默认信号是持续音 + 两个起音，默认方法为局部双向传播；
+                        想复现“单冲激前振铃 −150 dB”的结果，把信号切到单冲激即可。
+                    </p>
+
+                    <div class="win-panel">
+                        <div class="status-line">
+                            <span><span class="status-dot status-off" id="statusDot"></span><span id="statusText">准备中…</span></span>
+                            <span class="win-val" id="paramSummary">—</span>
+                        </div>
+                        <div class="busy-track" id="busyTrack"><div class="busy-fill" id="busyFill"></div></div>
+                    </div>
+
+                    <div class="win-panel">
+                        <div class="win-title">SIGNAL &amp; STFT</div>
+                        <div class="win-row">
+                            <label class="win-label">测试信号
+                                <select class="win-select" id="caseSel">
+                                    <option value="impulse">单冲激</option>
+                                    <option value="burst">噪声突发</option>
+                                    <option value="mixed" selected>持续音 + 两个起音</option>
+                                    <option value="tone">持续音（无瞬态）</option>
+                                </select>
+                            </label>
+                            <label class="win-label">分析窗
+                                <select class="win-select" id="windowSel">
+                                    <option value="1024">1024</option>
+                                    <option value="2048" selected>2048</option>
+                                </select>
+                            </label>
+                            <label class="win-label">FFT
+                                <span class="win-val" id="fftVal">4096</span>
+                            </label>
+                            <label class="win-label">合成 hop
+                                <select class="win-select" id="hopSel">
+                                    <option value="128">128</option>
+                                    <option value="256" selected>256</option>
+                                    <option value="512">512</option>
+                                </select>
+                            </label>
+                            <label class="win-label">拉伸
+                                <input class="win-range" id="ratioRange" type="range" min="1" max="3" step="0.001" value="2">
+                                <span class="win-val" id="ratioVal">2.000×</span>
+                            </label>
+                            <label class="win-label" title="WAV 会混合为单声道，取前 0.8 秒；起音由短窗谱通量自动检测。">
+                                载入 WAV <input type="file" id="fileInput" accept="audio/*" style="max-width:135px">
+                            </label>
+                        </div>
+                        <div class="win-row">
+                            <label class="win-label">相位差分
+                                <select class="win-select" id="edgeSel">
+                                    <option value="centered" selected>centered（论文中心差分）</option>
+                                    <option value="direct">direct（直接边差分）</option>
+                                </select>
+                            </label>
+                            <label class="win-label">锚点来源
+                                <select class="win-select" id="anchorSel">
+                                    <option value="known" selected>给定起音</option>
+                                    <option value="detected">自动检测</option>
+                                    <option value="none">无锚点</option>
+                                </select>
+                            </label>
+                            <label class="win-label">方法
+                                <select class="win-select" id="methodSel">
+                                    <option value="bidirectional" selected>局部双向传播（锚点）</option>
+                                    <option value="forward">局部前向传播（锚点）</option>
+                                    <option value="reset">逐帧积分 + 锚点重置</option>
+                                    <option value="causal-centered">逐帧积分 · 中心差分</option>
+                                    <option value="causal-direct">逐帧积分 · 直接差分</option>
+                                    <option value="global">全 STFT 堆 · 路径最弱</option>
+                                    <option value="global-magnitude">全 STFT 堆 · 幅度优先</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div class="win-row">
+                            <button class="win-btn" id="runBtn">运行 / 重算</button>
+                            <button class="win-btn" id="playBtn">播放流程</button>
+                            <label class="win-label">速度
+                                <select class="win-select" id="speedSel">
+                                    <option value="0.5">0.5×</option>
+                                    <option value="1" selected>1×</option>
+                                    <option value="2">2×</option>
+                                    <option value="4">4×</option>
+                                </select>
+                            </label>
+                            <span class="win-val" id="runNote"></span>
+                        </div>
+                    </div>
+
+                    <div class="flow-strip" id="flowStrip"></div>
+                    <p class="caption" id="caption">点击“运行 / 重算”开始。</p>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section>
+                <h3 class="section-title">波形与起音</h3>
+                <div class="section_content">
+                    <div class="viz-panel">
+                        <div class="viz-head">
+                            <span><b>输入</b> / <b>拉伸输出</b> · 分析窗与合成窗都是周期 Hann</span>
+                            <span id="waveInfo">—</span>
+                        </div>
+                        <canvas class="viz" id="waveCanvas"></canvas>
+                    </div>
+                    <div class="viz-tools">
+                        <button class="win-btn" id="playInBtn" disabled>播放输入</button>
+                        <button class="win-btn" id="playOutBtn" disabled>播放输出</button>
+                        <button class="win-btn" id="stopAudioBtn" disabled>停止声音</button>
+                        <span class="win-val" id="audioInfo"></span>
+                    </div>
+                    <p class="small-note">
+                        输出波形的灰色底纹是前振铃测量区（目标起音前一个分析窗）。单冲激的目标位置是
+                        <code>round(α·onset)</code>，双向传播会把主峰放回这个样点。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section>
+                <h3 class="section-title">时频谱与相位积分</h3>
+                <div class="section_content">
+                    <div class="viz-panel">
+                        <div class="viz-head">
+                            <span><b>对数幅度谱</b> · 色相 = 相位 · x 轴是合成帧时间，y 轴为 0–12 kHz</span>
+                            <span id="tfInfo">—</span>
+                        </div>
+                        <canvas class="viz" id="tfCanvas"></canvas>
+                        <div class="legend-row">
+                            <span class="legend-item"><span class="swatch anchor"></span>锚点 bin</span>
+                            <span class="legend-item"><span class="swatch seed"></span>种子</span>
+                            <span class="legend-item"><span class="swatch frontier"></span>当前前沿</span>
+                            <span class="legend-item"><span class="swatch parent"></span>父链</span>
+                            <span class="phase-legend">相位 <span>−π</span><i class="phase-gradient"></i><span>+π</span></span>
+                        </div>
+                    </div>
+                    <div class="viz-tools">
+                        <div class="reveal-row">
+                            <label>积分进度 <input id="revealRange" type="range" min="0" max="1000" value="1000"></label>
+                            <span class="win-val" id="revealLabel">—</span>
+                        </div>
+                        <label><input type="checkbox" id="edgeChk" checked> 显示相位边箭头</label>
+                        <label><input type="checkbox" id="parentChk" checked> 显示父链</label>
+                    </div>
+                    <p class="small-note">
+                        积分阶段逐格揭示堆的访问顺序。拖动“积分进度”可以停在任意一步；在时间频率平面上移动鼠标
+                        查看格子，单击可把下方格子视图移到该处。色相表示合成相位，亮度表示该 bin 的幅度。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section>
+                <h3 class="section-title">时频格细节</h3>
+                <div class="section_content">
+                    <div class="viz-panel">
+                        <div class="viz-head">
+                            <span><b>格子视图</b> · 横轴 bin，纵轴帧；箭头是乘以 α 后的相位步长</span>
+                            <span id="zoomInfo">—</span>
+                        </div>
+                        <canvas class="viz" id="zoomCanvas"></canvas>
+                        <div class="readout" id="zoomReadout">移动鼠标查看格子…</div>
+                    </div>
+                    <div class="legend-row" style="border-top:none;background:#c0c0c0;color:#333;">
+                        <span class="legend-item"><span class="swatch" style="background:#54c8ff"></span>时间边 &gt; 0（向下）</span>
+                        <span class="legend-item"><span class="swatch" style="background:#ff9a55"></span>时间边 &lt; 0（向上）</span>
+                        <span class="legend-item"><span class="swatch" style="background:#9fe36b"></span>频率边 &gt; 0（向右）</span>
+                        <span class="legend-item"><span class="swatch" style="background:#e07bff"></span>频率边 &lt; 0（向左）</span>
+                    </div>
+                    <p class="small-note">
+                        <code>centered</code> 先把前向／后向差分分别解缠再平均成节点梯度；<code>direct</code>
+                        直接取相邻帧相位差并乘以 α。整数拉伸率下，<code>direct</code> 边绕任何闭环严格闭合，
+                        <code>centered</code> 只近似闭合，这也是积分路径会影响结果的原因。
+                    </p>
+                    <p class="small-note">
+                        单冲激在起音帧会让几乎每个 bin 都满足锚点条件，格子视图会整行出现青色菱形；
+                        想看更稀疏的锚点和更明显的时频结构，可切换到“噪声突发”或“持续音 + 两个起音”。
+                        局部前向／双向方法先用锚点传播得到固定相位，再用逐帧算法填充其余格子，
+                        所以“堆积分”会先显示局部传播、再显示逐帧填充。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section>
+                <h3 class="section-title">指标对比</h3>
+                <div class="section_content">
+                    <div class="table-scroll">
+                        <table class="metric-table">
+                            <thead>
+                                <tr>
+                                    <th>方法</th>
+                                    <th>差分</th>
+                                    <th>前振铃 / dB</th>
+                                    <th>后能量 / dB</th>
+                                    <th>主峰偏移</th>
+                                    <th>STFT 残差</th>
+                                    <th>说明</th>
+                                </tr>
+                            </thead>
+                            <tbody id="metricBody">
+                                <tr><td colspan="7">尚未计算</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="metric-note">
+                        前振铃是第一个起音前方一个分析窗内的能量占比，后能量是事件结束后到窗尾的能量占比。
+                        主峰偏移以采样点计。STFT 残差是 WOLA 输出重分析后与目标复数 STFT 的相对误差。
+                        表中固定评估以下五种局部方法；若当前选择全 STFT 堆，会额外加入一行。
+                        小格闭环 RMS：<span id="loopInfo">—</span>
+                    </p>
+                    <div class="stat-line" id="stats"></div>
+                    <p class="small-note">
+                        积分算法与 <code>rtpghi.py</code> 对齐；未积分 bin 在合成时用固定种子随机初相填充
+                        （实验室脚本用 PCG64(0)，本页的随机序列不同），所以指标与 README 表格不会逐位相同。
+                        把鼠标放在时频格上可以查看该格是否真正被堆访问；随机初相不会画成已积分相位。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section>
+                <h3 class="section-title">算法流程</h3>
+                <div class="section_content">
+                    <p>
+                        记分析 hop \(H_a\)、合成 hop \(H_s\)、拉伸率 \(\alpha=H_s/H_a\)，FFT 长度为 \(M\)。
+                        每一行是一帧，列是 bin。分析帧中心位于 \(rH_a\)，合成帧中心位于 \(rH_s\)。
+                    </p>
+                    <div class="algo-grid">
+                        <div class="algo-card">
+                            <h4>1 · 分析 STFT</h4>
+                            以窗中心为原点，周期 Hann 窗
+                            <div class="formula-block">\(w[n]=0.5-0.5\cos(2\pi n/M_w)\)</div>
+                            帧在 FFT 前循环左移半个窗，使相位以窗中心为参考。这样相位差与
+                            "窗中心频率"的线性项直接对应。输出 \(|X[r,k]|\) 和 \(\varphi[r,k]\)。
+                            WOLA 用同一窗、合成 hop 和窗平方和归一化。
+                        </div>
+                        <div class="algo-card">
+                            <h4>2 · 相位差分 → 边</h4>
+                            <div class="formula-block">
+                                \(\Delta_t[r,k]=\operatorname{wrap}(\varphi[r+1,k]-\varphi[r,k]-\frac{2\pi H_a k}{M})+\frac{2\pi H_a k}{M}\)<br>
+                                \(\Delta_f[r,k]=\operatorname{wrap}(\varphi[r,k+1]-\varphi[r,k])\)<br>
+                                边 = \(\alpha\Delta_t,\;\alpha\Delta_f\)
+                            </div>
+                            中心差分把相邻的两条前向边先平均成节点梯度，再用节点梯度平均成边，
+                            对应论文第 III 节的梯形积分。
+                        </div>
+                        <div class="algo-card">
+                            <h4>3 · 瞬态锚点</h4>
+                            用短窗宽带正谱通量检测起音，再在波形上把位置细化到上升沿。对起音帧中
+                            相对起音前明显上升、且能解释长窗幅度的 bin 固定相位：
+                            <div class="formula-block">\(\varphi_{\text{out}}[r,k]=\operatorname{wrap}(\varphi[r,k]-2\pi k\Delta/M)\)</div>
+                            \(\Delta\) 是输出起音位置、分析帧中心与合成帧中心之间的偏移差。
+                        </div>
+                        <div class="algo-card">
+                            <h4>4 · 堆积分</h4>
+                            算法 1 逐帧处理：旧帧的 bin 先入堆，按当前帧幅度出堆，
+                            再向左右 bin 扩散；当前帧的锚点也会直接入堆。局部版本从锚点出发，
+                            只在 ±半径帧内积分；双向版本允许沿时间边向过去传播。传播到的格子成为固定相位，
+                            再用逐帧算法补齐其余格子（对应 <code>experiment.py</code> 的 locked 相位）。
+                            全 STFT 堆每次堆空就从剩余最强 bin 重新播种。
+                            路径最弱版本按"沿途最小幅度"排序，相同优先级先走短路径。
+                        </div>
+                        <div class="algo-card">
+                            <h4>5 · 合成与评估</h4>
+                            <div class="formula-block">\(y[n]=\frac{\sum_r w[n-rH_s]\,\mathrm{IFFT}\{A[r,k]e^{j\hat\varphi[r,k]}\}[n-rH_s]}{\sum_r w^2[n-rH_s]}\)</div>
+                            幅度沿用输入 STFT。重分析输出并与目标 \(A e^{j\hat\varphi}\) 比较得到 STFT 残差；
+                            闭环残差取每个小格四条边绕一圈的模 \(2\pi\) 余量，并按四角最弱幅度平方加权。
+                        </div>
+                    </div>
+
+                    <h4>逐帧积分伪代码</h4>
+                    <div class="frame" style="font-family:Consolas,monospace;font-size:11px;line-height:1.6;">
+<pre style="margin:0;background:none;border:none;box-shadow:none;padding:0;">for row = 1 .. rows-1:
+    pending = { k | |X[row,k]| &gt; tol · max(peak[row-1], peak[row]) } - anchors
+    heap    = { (-|X[row-1,k]|, k) | k in pending } ∪ { (-|X[row,k]|, k) | k in anchors[row] }
+    while pending is not empty:
+        pop the entry with the largest source magnitude (ties: smaller k)
+        if source is the previous frame:
+            target = (row, k), phase = phase[row-1,k] + timeEdge[row-1,k]
+        else:
+            target = (row, k±1), phase = phase[row,k] ± freqEdge[row,k]
+        if target is pending:
+            set phase, push (-|X[target]|, target)
+</pre>
+                    </div>
+                    <p class="small-note">
+                        这是“逐帧”基线；页面的锚点重置把锚点作为额外的堆入口，局部前向／双向则改用
+                        全格堆，以当前 bin 幅度或路径最弱幅度为优先级。算法实现见
+                        <code>dsp/rtpghi/rtpghi_core.js</code>，源头是
+                        <code>qwqdsp/labs/rtpghi/rtpghi.py</code>。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section>
+                <h3 class="section-title">参考</h3>
+                <div class="section_content">
+                    <ul class="reference-list">
+                        <li>
+                            <code>qwqdsp/labs/rtpghi</code> 的 README、<code>rtpghi.py</code>、<code>experiment.py</code>
+                            —— 本页算法的直接来源与实验数据。
+                        </li>
+                        <li>
+                            <a href="https://arxiv.org/html/2202.07382v1">Phase Vocoder Done Right</a>
+                            —— 中心相位差分、梯形积分、锚点相位与算法 1。
+                        </li>
+                        <li>
+                            <a href="https://ltfat.org/notes/ltfatnote040.pdf">Phase Gradient Heap Integration (PGHI)</a>
+                            —— 从幅度重建相位、全时频堆与路径排序。
+                        </li>
+                        <li>
+                            <a href="../pghi/index.html">实时 PGHI 移调器</a> —— 本博客里的实时 PGHI 页面。
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="rtpghi_core.js"></script>
+    <script src="rtpghi_demo.js"></script>
+    <script src="../../main.js"></script>
+</body>
+
+</html>

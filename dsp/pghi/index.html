@@ -214,16 +214,16 @@
                 </div>
                 <div class="win-row">
                     <label class="win-label" for="phaseSel">相位积分</label>
-                    <select class="win-select" id="phaseSel" title="二维联合积分使用短窗 Flux 定位起音，并增加两个合成 hop 的前瞻。">
+                    <select class="win-select" id="phaseSel">
                         <option value="0" selected>PGHI</option>
-                        <option value="1">二维联合积分</option>
+                        <option value="1" title="使用 DSPark 的起音标记，增加两个合成 hop 的前瞻。">二维联合积分</option>
+                        <option value="2" title="固定 DSPark 瞬态帧的相位，回溯校正与它重叠的 STFT 帧。增加窗长加一个 hop 的合成延迟。">双向 RTPGHI（整帧重置）</option>
+                        <option value="3" title="DSPark 触发后按 Röbel 的谱峰能量重心选区，重置选中峰区的时间入口并回溯。">双向 RTPGHI（局部重置）</option>
                     </select>
                     <span class="win-label">瞬态检测</span>
                     <div class="mode-btns" id="modeBtns">
                         <button class="win-btn" data-mode="0">None</button>
                         <button class="win-btn on" data-mode="1">DSPark</button>
-                        <button class="win-btn" data-mode="2">短窗 Flux</button>
-                        <button class="win-btn" data-mode="3">局部相位校正</button>
                     </div>
                     <button class="win-btn" id="bypassBtn">BYPASS: OFF</button>
                 </div>
@@ -276,7 +276,7 @@
     <script>
         'use strict';
 
-        const MODE_NAMES = ['None', 'DSPark', '短窗 Flux', '局部相位校正'];
+        const MODE_NAMES = ['None', 'DSPark'];
         const state = {
             ctx: null,
             worklet: null,
@@ -301,7 +301,7 @@
             state.ctx.addEventListener('statechange', () => {
                 if (state.ctx.state !== 'running') updateAudioLoad();
             });
-            await state.ctx.audioWorklet.addModule('pghi_worklet.js?v=6');
+            await state.ctx.audioWorklet.addModule('pghi_worklet.js?v=7');
             state.worklet = new AudioWorkletNode(state.ctx, 'pghi-processor', {
                 outputChannelCount: [2], channelCount: 2, channelCountMode: 'clamped-max'
             });
@@ -329,7 +329,7 @@
             // 加载 wasm 核心，把字节传给 worklet 自行编译实例化
             // （AudioWorklet 的 MessagePort 传 WebAssembly.Module 在部分 Chrome 版本不可靠）
             try {
-                const resp = await fetch('pghi_shifter.wasm?v=14');
+                const resp = await fetch('pghi_shifter.wasm?v=18');
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const bytes = await resp.arrayBuffer();
                 state.worklet.port.postMessage({ type: 'wasm', bytes });

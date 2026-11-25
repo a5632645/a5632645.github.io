@@ -53,7 +53,7 @@ class PghiProcessor extends AudioWorkletProcessor {
             ex.set_pitch_shift(this.pitch);
         }
         if (typeof m.mode === 'number') {
-            this.mode = m.mode;
+            this.mode = m.mode === 1 ? 1 : 0;
             ex.set_transient_mode(this.mode);
         }
         if (typeof m.phaseIntegration === 'number') {
