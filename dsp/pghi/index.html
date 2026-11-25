@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>实时 PGHI 移调器（playing.cpp 移植）</title>
+    <title>实时 PGHI 移调器</title>
 
     <link rel="stylesheet" href="/main.css">
     <!-- code -->
@@ -133,6 +133,8 @@
             border: 1px solid #2e3238;
             max-width: 900px;
             width: 100%;
+            /* 固定 CSS 高度，位图分辨率由 JS 按 DPR 重新设置。 */
+            height: 180px;
             margin: 10px 0;
         }
 
@@ -142,7 +144,7 @@
 <body class="page">
     <div class="page-header">
         <button onclick="window.location.href='/index.html'">back</button>
-        <b>实时 PGHI 移调器（playing.cpp 移植）</b>
+        <b>实时 PGHI 移调器</b>
     </div>
     <div class="page-body">
     <main class="page-content">
@@ -158,6 +160,9 @@
                 </span>
                 <span class="win-val audio-load" title="最近约 0.5 秒内，PGHI AudioWorklet 处理耗时占可用音频时间的比例。">
                     音频线程 CPU <span id="audioLoad">—</span>
+                </span>
+                <span class="win-val audio-load" title="从输入到 AudioWorklet 输出的估算延迟，仅包含处理器内部延迟。">
+                    处理延迟 <span id="processorLatency">—</span>
                 </span>
             </div>
 
@@ -189,11 +194,11 @@
                     <span class="win-label">窗函数</span>
                     <select class="win-select" id="winSel">
                         <option value="hann">hann (×4)</option>
-                        <option value="blackman-harris-3term" selected>blackman-harris 3-term (×6)</option>
+                        <option value="blackman-harris-3term">blackman-harris 3-term (×6)</option>
                         <option value="blackman-harris">blackman-harris 4-term (×8)</option>
                         <optgroup label="Gaussian 峰值旁瓣">
                             <option value="gaussian-59db">Gaussian −59 dB (×5)</option>
-                            <option value="gaussian-79db">Gaussian −79 dB (×6)</option>
+                            <option value="gaussian-79db" selected>Gaussian −79 dB (×6)</option>
                             <option value="gaussian-102db">Gaussian −102 dB (×7)</option>
                             <option value="gaussian">Gaussian −128 dB (×8)</option>
                         </optgroup>
@@ -207,23 +212,24 @@
                     <label class="win-label" for="algorithmSel">算法</label>
                     <select class="win-select" id="algorithmSel">
                         <option value="0">RTPGHI</option>
-                        <option value="1" selected title="使用 DSPark 检测瞬态并重置整帧相位。">RTPGHI相位重置</option>
+                        <option value="1" title="使用 DSPark 检测瞬态并重置整帧相位。">RTPGHI相位重置</option>
                         <option value="2" title="使用 DSPark 的起音标记，增加两个合成 hop 的前瞻。">二维联合积分</option>
                         <option value="3" title="固定 DSPark 瞬态帧的相位，回溯校正与它重叠的 STFT 帧。">双向RTPGHI全局重置</option>
-                        <option value="4" title="用 Röbel 谱峰能量重心检测瞬态，锚定选中峰区并回溯。">双向RTPGHI局部重置</option>
+                        <option value="4" selected title="用 Röbel 谱峰能量重心检测瞬态，锚定选中峰区并回溯。">双向RTPGHI局部重置</option>
                     </select>
+                    <label class="win-label"><input type="checkbox" id="fullSpectrumChk"> 全频谱处理</label>
                     <button class="win-btn" id="bypassBtn">BYPASS: OFF</button>
                 </div>
                 <div class="win-row">
-                    <span class="win-label">冷却时间</span>
-                    <input class="win-range" type="range" id="cooldownRange" min="0" max="300" step="1" value="64">
+                    <label class="win-label" for="cooldownRange">DSPark 冷却时间</label>
+                    <input class="win-range" type="range" id="cooldownRange" min="0" max="300" step="1" value="64" disabled>
                     <span class="win-val" id="cooldownVal">64 ms</span>
                     <span class="win-label">输出音量</span>
                     <input class="win-range" type="range" id="volRange" min="0" max="150" step="5" value="100">
                 </div>
             </div>
 
-            <canvas id="wave" width="900" height="180"></canvas>
+            <canvas id="wave" width="900" height="180" aria-label="叠加显示的输入和输出波形"></canvas>
         </div>
     </section>
 
@@ -276,7 +282,8 @@
             startCtxTime: 0,
             displayInfo: null,
             geometry: null,
-            params: { pitch: 0, algorithm: 1, bypass: false, hop: 512, window: 'blackman-harris-3term', cooldownMs: 64, vol: 1.0 },
+            params: { pitch: 0, algorithm: 4, fullSpectrum: false, bypass: false, hop: 768,
+                window: 'gaussian-79db', cooldownMs: 64, vol: 1.0 },
         };
 
         // ---------------- AudioContext / Worklet ----------------
@@ -287,7 +294,7 @@
             state.ctx.addEventListener('statechange', () => {
                 if (state.ctx.state !== 'running') updateAudioLoad();
             });
-            await state.ctx.audioWorklet.addModule('pghi_worklet.js?v=8');
+            await state.ctx.audioWorklet.addModule('pghi_worklet.js?v=10');
             state.worklet = new AudioWorkletNode(state.ctx, 'pghi-processor', {
                 outputChannelCount: [2], channelCount: 2, channelCountMode: 'clamped-max'
             });
@@ -300,6 +307,9 @@
                 if (!d) return;
                 if (d.type === 'display') {
                     state.displayInfo = d;
+                    document.getElementById('processorLatency').textContent = d.latencySamples < 0
+                        ? '—'
+                        : d.latencyMs.toFixed(2) + ' ms（' + Math.round(d.latencySamples) + ' 样本）';
                 } else if (d.type === 'geometry') {
                     state.geometry = d;
                     updateWindowInfo();
@@ -315,7 +325,7 @@
             // 加载 wasm 核心，把字节传给 worklet 自行编译实例化
             // （AudioWorklet 的 MessagePort 传 WebAssembly.Module 在部分 Chrome 版本不可靠）
             try {
-                const resp = await fetch('pghi_shifter.wasm?v=24');
+                const resp = await fetch('pghi_shifter.wasm?v=26');
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const bytes = await resp.arrayBuffer();
                 state.worklet.port.postMessage({ type: 'wasm', bytes });
@@ -450,14 +460,64 @@
 
         // ---------------- 波形绘制 ----------------
 
-        const CW = 900, CH = 180;
-        const waveTop = 24, waveBottom = CH - 6;
+        const waveTop = 24;
+
+        // 位图尺寸跟随画布的 CSS 尺寸与 DPR。原先固定 900×180 的位图在手机上
+        // 会被 CSS 缩小，再叠加 DPR 变换，只有左侧一小部分能显示出来。
+        function fitCanvas(cv) {
+            const dpr = Math.min(2, window.devicePixelRatio || 1);
+            const w = Math.max(1, cv.clientWidth);
+            const h = Math.max(1, cv.clientHeight);
+            const bw = Math.round(w * dpr);
+            const bh = Math.round(h * dpr);
+            if (cv.width !== bw || cv.height !== bh) {
+                cv.width = bw;
+                cv.height = bh;
+            }
+            const ctx = cv.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            return { ctx: ctx, w: w, h: h };
+        }
+
+        function envelopeBounds(info, env, delay) {
+            const cols = info.columns;
+            const available = Math.min(cols, info.totalColumns);
+            let minimum = Infinity;
+            let maximum = -Infinity;
+            for (let k = 0; k < available; ++k) {
+                const idx = (info.colIndex - 1 - k + cols) % cols;
+                const latency = delay ? delay[idx] : 0;
+                if (latency < 0 || k + latency / info.columnSamples >= cols) continue;
+                minimum = Math.min(minimum, env[2 * idx]);
+                maximum = Math.max(maximum, env[2 * idx + 1]);
+            }
+            if (minimum > maximum) return { center: 0, peak: 0 };
+            return { center: (minimum + maximum) * 0.5, peak: (maximum - minimum) * 0.5 };
+        }
+
+        function drawEnvelope(ctx, info, view, env, delay, center, color) {
+            const cols = info.columns;
+            const available = Math.min(cols, info.totalColumns);
+            ctx.fillStyle = color;
+            for (let k = 0; k < available; ++k) {
+                const idx = (info.colIndex - 1 - k + cols) % cols;
+                const latency = delay ? delay[idx] : 0;
+                if (latency < 0 || k + latency / info.columnSamples >= cols) continue;
+                const x = view.width - (k + 1 + latency / info.columnSamples) * view.colW;
+                const min = env[2 * idx];
+                const max = env[2 * idx + 1];
+                const height = (max - min) * view.amplitudeScale;
+                const y = view.midY - (max - center) * view.amplitudeScale;
+                ctx.fillRect(x, y - Math.max(0, 1 - height) * 0.5, Math.max(1, view.colW), Math.max(1, height));
+            }
+        }
 
         function draw() {
             const cv = document.getElementById('wave');
-            const ctx = cv.getContext('2d');
-            const dpr = window.devicePixelRatio || 1;
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            const fitted = fitCanvas(cv);
+            const ctx = fitted.ctx;
+            const CW = fitted.w, CH = fitted.h;
+            const waveBottom = CH - 6;
             ctx.clearRect(0, 0, CW, CH);
 
             // 面板
@@ -474,46 +534,38 @@
                 return;
             }
 
-            // 标题
-            ctx.fillStyle = '#e8edf2';
-            ctx.fillText('INPUT WAVEFORM (3 s)', 12, 18);
-
-            // 中线
-            const midY = (waveTop + waveBottom) * 0.5;
-            const halfH = (waveBottom - waveTop) * 0.5;
-            ctx.strokeStyle = '#3c4045';
-            ctx.beginPath();
-            ctx.moveTo(2, midY);
-            ctx.lineTo(CW - 2, midY);
-            ctx.stroke();
-
             const cols = info.columns;
             const colW = CW / cols;
+            const midY = (waveTop + waveBottom) * 0.5;
+            const inputBounds = envelopeBounds(info, info.env, null);
+            const outputBounds = envelopeBounds(info, info.outputEnv, info.outputDelay);
+            const amplitudeScale = (waveBottom - waveTop) * 0.5
+                / Math.max(1, inputBounds.peak, outputBounds.peak);
+            const view = { width: CW, colW, midY, amplitudeScale };
 
-            // 列包络（k = 0 为最新一列，从右向左）
-            ctx.fillStyle = 'rgba(76, 201, 151, 0.85)';
-            for (let k = 0; k < cols; ++k) {
-                const idx = (info.colIndex - 1 - k + cols) % cols;
-                const mn = info.env[2 * idx];
-                const mx = info.env[2 * idx + 1];
-                const y1 = midY - Math.max(-1, Math.min(1, mx)) * halfH;
-                const y2 = midY - Math.max(-1, Math.min(1, mn)) * halfH;
-                const x = CW - (k + 1) * colW;
-                const h = Math.max(1, y2 - y1);
-                ctx.fillRect(x, y1, colW, h);
-            }
+            ctx.fillStyle = '#4cc997';
+            ctx.fillText('输入 · 3 秒', 12, 18);
+            ctx.fillStyle = '#8acaff';
+            ctx.fillText(info.bypass ? '输出 · 旁路' : '输出 · 延迟对齐', 100, 18);
+            ctx.strokeStyle = '#3c4045';
+            ctx.beginPath();
+            ctx.moveTo(0, midY);
+            ctx.lineTo(CW, midY);
+            ctx.stroke();
+            drawEnvelope(ctx, info, view, info.env, null, inputBounds.center, 'rgba(76, 201, 151, 0.58)');
+            drawEnvelope(ctx, info, view, info.outputEnv, info.outputDelay, outputBounds.center, 'rgba(138, 202, 255, 0.58)');
 
             // 瞬态检测点竖线
             if (info.markCount > 0) {
-                const samplesPerCol = info.displaySize / cols;
-                const pos = info.position;
+                const samplesPerCol = info.columnSamples;
+                const pos = info.position - info.position % samplesPerCol;
                 ctx.fillStyle = '#e1ac4a';
                 const start = Math.max(0, info.markCount - info.marks.length);
                 for (let i = start; i < info.markCount; ++i) {
                     const mark = info.marks[i % info.marks.length];
                     if (mark > pos) continue;
                     const age = pos - mark;
-                    if (age >= info.displaySize) continue;
+                    if (age >= samplesPerCol * cols) continue;
                     const x = CW - (age / samplesPerCol) * colW;
                     ctx.fillRect(x, waveTop, 1, waveBottom - waveTop);
                 }
@@ -578,7 +630,13 @@
 
             document.getElementById('algorithmSel').addEventListener('change', (e) => {
                 state.params.algorithm = Number(e.target.value);
-                document.getElementById('cooldownRange').disabled = state.params.algorithm === 0;
+                document.getElementById('cooldownRange').disabled =
+                    state.params.algorithm === 0 || state.params.algorithm === 4;
+                applyParams();
+            });
+
+            document.getElementById('fullSpectrumChk').addEventListener('change', (e) => {
+                state.params.fullSpectrum = e.target.checked;
                 applyParams();
             });
 

@@ -259,6 +259,7 @@ constexpr size_t kInputResampleRing = 4 * kInputRadius;
 constexpr size_t kSincTableSize = 2048;
 constexpr size_t kMaxTransientMarks = 32;
 constexpr size_t kDisplayColumns = 900;
+constexpr size_t kLatencyFrameHistory = 64;
 
 constexpr size_t kPffftAlignment = 16;
 // Upstream allocates one setup object and N floats for a real plan.
@@ -890,6 +891,7 @@ public:
     }
     bool firstFrame = true;
     Algorithm algorithm = Algorithm::RtpghiPhaseReset;
+    bool fullSpectrum = false;
     JointPhaseFrame jointFrames[kJointFrames];
     size_t jointHead = 0;
     size_t jointCount = 0;
@@ -902,7 +904,6 @@ public:
     size_t jointOnsetWrite = 0;
     float transientEndSlope = 0.0f;
     size_t transientSamplesLeft = 0;
-    size_t localTransientCooldown = 0;
     float transientBackground = 0.0f;
     bool transientBackgroundReady = false;
     double localTransientPosition = 0.0;
@@ -1000,6 +1001,9 @@ public:
     uint64_t synthesisClearedUntil = 0;
     double resamplePosition = 0.0;
     bool resamplerStarted = false;
+    double analysisCenters[kLatencyFrameHistory];
+    double lastRenderedPosition = 0.0;
+    uint64_t lastRenderedAt = 0;
 
     // 显示
     uint64_t inputPosition = 0;
@@ -1194,6 +1198,7 @@ public:
         synthesisClearedUntil = 0;
         resamplePosition = 0.0;
         resamplerStarted = false;
+        lastRenderedAt = 0;
         setCurrentRatio(targetRatio);
         inputPosition = 0;
 
@@ -1225,7 +1230,6 @@ public:
         dsfluxWindow = kDsFluxReferenceWindow;
         dsfluxCooldown = 0;
         transientSamplesLeft = 0;
-        localTransientCooldown = 0;
         transientBackground = 0.0f;
         transientBackgroundReady = false;
         firstFrame = true;
@@ -1360,10 +1364,6 @@ public:
         constexpr float kBackgroundMargin = 0.001f;
         const bool tracking = transientSamplesLeft != 0;
         if (!tracking) {
-            if (localTransientCooldown != 0) {
-                --localTransientCooldown;
-                return false;
-            }
             for (bool& selected : transientPeakBins) selected = false;
         }
         float peak = 0.0f;
@@ -1467,8 +1467,9 @@ public:
 
         // 为输出抗混叠滤波保留过渡带，跳过更高频点的相位分析和传播。
         const float outputStep = outputResampleStep;
-        const float band = outputStep > 1.25f ? 1.25f / outputStep : 1.0f;
-        const size_t activeBins = 1 + (size_t)((float)(numBins - 1) * band);
+        const size_t activeBins = !fullSpectrum && outputStep > 1.25f
+            ? 1 + (size_t)((float)(numBins - 1) * (1.25f / outputStep))
+            : numBins;
         const bool useLocalReset = algorithm == Algorithm::BidirectionalLocalReset;
         const bool detectDsPark = algorithm != Algorithm::Rtpghi && !useLocalReset
             && !firstFrame && detectorActiveBins != 0;
@@ -1510,7 +1511,6 @@ public:
             if (propagatePghi(analysisHop, activeBins, localReset)) {
                 anchor = RtpghiAnchor::Local;
                 putTransientMark(localTransientPosition);
-                localTransientCooldown = cooldownFramesForHop(cooldownMs, analysisHop);
             }
         }
 
@@ -1721,6 +1721,8 @@ public:
 
     void completeSynthesisFrame(size_t bins, size_t analysisHop, bool locked, RtpghiAnchor anchor) {
         const uint64_t start = synthesisFrameStart;
+        const size_t center = (inputWrite + halfWindow) % windowSize;
+        analysisCenters[(start / hopSize) % kLatencyFrameHistory] = inputSourcePositions[center];
         synthesisFrameStart += hopSize;
         if (algorithm == Algorithm::BidirectionalGlobalReset ||
             algorithm == Algorithm::BidirectionalLocalReset) {
@@ -2023,6 +2025,8 @@ public:
         const uint64_t lower = (uint64_t)resamplePosition;
         if (lower + radius >= synthesisAvailable) return 0.0f;
         const float output = interpolate(synthesisRing, resamplePosition, cutoff, outputKernel);
+        lastRenderedPosition = resamplePosition;
+        lastRenderedAt = inputPosition;
         resamplePosition += (double)outputStep;
         const uint64_t floorPosition = (uint64_t)resamplePosition;
         const uint64_t clearUntil = floorPosition > radius ? floorPosition - radius : 0;
@@ -2031,6 +2035,21 @@ public:
             ++synthesisClearedUntil;
         }
         return output;
+    }
+
+    double latencySamples() const {
+        if (lastRenderedAt == 0) return -1.0;
+
+        // 合成窗中心 start + halfWindow 对应分析窗中心的原始输入位置。
+        const double framePosition = (lastRenderedPosition - (double)halfWindow) / (double)hopSize;
+        const uint64_t frame = (uint64_t)framePosition;
+        const uint64_t frameCount = synthesisFrameStart / hopSize;
+        if (frame + 1 >= frameCount || frameCount - frame > kLatencyFrameHistory) return -1.0;
+
+        const double left = analysisCenters[frame % kLatencyFrameHistory];
+        const double right = analysisCenters[(frame + 1) % kLatencyFrameHistory];
+        const double inputSample = left + (framePosition - (double)frame) * (right - left);
+        return (double)(lastRenderedAt - 1) - inputSample;
     }
 
     void putTransientMark(double position) {
@@ -2088,6 +2107,9 @@ void set_cooldown_ms(float ms) {
     g_mid.setCooldownMs(ms);
     g_side.setCooldownMs(ms);
 }
+void set_full_spectrum(int enabled) {
+    g_mid.fullSpectrum = g_side.fullSpectrum = enabled != 0;
+}
 void reinit(int hop, int win) {
     g_mid.reinit((size_t)hop, win);
     g_side.reinit((size_t)hop, win);
@@ -2114,6 +2136,7 @@ int window_type() { return g_mid.windowType; }
 int display_size() { return (int)g_mid.displaySize; }
 int columns() { return (int)g_mid.displayColumns; }
 double position() { return (double)g_mid.inputPosition; }
+double latency_samples() { return g_mid.latencySamples(); }
 double ratio() { return (double)g_mid.currentRatio; }
 
 } // extern "C"

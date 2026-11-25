@@ -3,9 +3,10 @@ Push-Location $PSScriptRoot
 try {
     $exports = @(
         'init', 'process', 'set_pitch_shift', 'set_algorithm',
-        'set_cooldown_ms', 'reinit', 'reset', 'in_ptr', 'out_ptr', 'in_right_ptr',
+        'set_cooldown_ms', 'set_full_spectrum', 'reinit', 'reset', 'in_ptr', 'out_ptr', 'in_right_ptr',
         'out_right_ptr', 'env_ptr', 'marks_ptr', 'mark_count', 'col_index', 'total_columns',
-        'hop', 'window_size', 'fft_size', 'window_type', 'display_size', 'columns', 'position', 'ratio'
+        'hop', 'window_size', 'fft_size', 'window_type', 'display_size', 'columns', 'position', 'ratio',
+        'latency_samples'
     )
     $flags = @('--target=wasm32', '-msimd128', '-mbulk-memory', '-O3', '-flto', '-DNDEBUG')
     $object = Join-Path ([System.IO.Path]::GetTempPath()) ("pghi-pffft-" + [guid]::NewGuid() + ".o")

@@ -4,8 +4,8 @@
  * DSP 核心在 pghi_shifter.wasm（C++ 编译，clang wasm32，无 emscripten）。
  * 主线程加载 wasm Module 后通过 port 传入，本处理器在此实例化并逐量子调用：
  *   process(): 输入拷入 wasm 内存 → ex.process(n) → 输出拷回
- *   params:    音高 / 算法 / 统一冷却时间(ms) / HOP / 窗函数
- *   display:   每 8 个量子从 wasm 读取波形包络与瞬态标记发回主线程
+ *   params:    音高 / 算法 / DSPark 冷却时间(ms) / 全频谱 / HOP / 窗函数
+ *   display:   每 8 个量子发送输入、输出包络、瞬态标记与处理延迟
  *
  */
 
@@ -47,6 +47,7 @@ class PghiProcessor extends AudioWorkletProcessor {
         }
         if (m.type !== 'params' || !this.wasm) return;
         const ex = this.wasm.exports;
+        const previousPosition = ex.position();
         if (typeof m.pitch === 'number') {
             this.pitch = m.pitch;
             ex.set_pitch_shift(this.pitch);
@@ -56,6 +57,9 @@ class PghiProcessor extends AudioWorkletProcessor {
         }
         if (typeof m.cooldownMs === 'number') {
             ex.set_cooldown_ms(m.cooldownMs);
+        }
+        if (typeof m.fullSpectrum === 'boolean') {
+            ex.set_full_spectrum(m.fullSpectrum ? 1 : 0);
         }
         if (typeof m.bypass === 'boolean') {
             this.bypass = m.bypass;
@@ -70,6 +74,7 @@ class PghiProcessor extends AudioWorkletProcessor {
         } else if (m.reset) {
             ex.reset();
         }
+        if (ex.position() < previousPosition) this.resetOutputEnvelope();
     }
 
     // 支持两种载荷：WebAssembly.Module（m.module）或 ArrayBuffer 字节（m.bytes）
@@ -89,6 +94,7 @@ class PghiProcessor extends AudioWorkletProcessor {
         this.outBase = [ex.out_ptr() >> 2, ex.out_right_ptr() >> 2];
         ex.init(sampleRate, this.hop, WINDOW_INDEX[this.windowType]);
         ex.set_cooldown_ms(64);
+        this.resetOutputEnvelope();
         this.postGeometry();
         this.port.postMessage({ type: 'wasm-ready' });
     }
@@ -102,6 +108,36 @@ class PghiProcessor extends AudioWorkletProcessor {
             windowSize: ex.window_size(),
             fftSize: ex.fft_size(),
         });
+    }
+
+    resetOutputEnvelope() {
+        const ex = this.wasm.exports;
+        const columns = ex.columns();
+        this.columnSamples = Math.ceil(ex.display_size() / columns);
+        this.outputEnv = new Float32Array(columns * 2);
+        this.outputDelay = new Float32Array(columns).fill(-1);
+        this.outputColumn = 0;
+        this.outputColumnSamples = 0;
+        this.outputMin = Infinity;
+        this.outputMax = -Infinity;
+    }
+
+    collectOutputEnvelope(output, latency) {
+        const left = output[0];
+        const right = output[1] ?? left;
+        for (let i = 0; i < left.length; ++i) {
+            this.outputMin = Math.min(this.outputMin, left[i], right[i]);
+            this.outputMax = Math.max(this.outputMax, left[i], right[i]);
+            if (++this.outputColumnSamples === this.columnSamples) {
+                this.outputEnv[2 * this.outputColumn] = this.outputMin;
+                this.outputEnv[2 * this.outputColumn + 1] = this.outputMax;
+                this.outputDelay[this.outputColumn] = latency;
+                this.outputColumn = (this.outputColumn + 1) % this.outputDelay.length;
+                this.outputColumnSamples = 0;
+                this.outputMin = Infinity;
+                this.outputMax = -Infinity;
+            }
+        }
     }
 
     process(inputs, outputs) {
@@ -133,8 +169,10 @@ class PghiProcessor extends AudioWorkletProcessor {
             }
         }
 
+        const latency = this.bypass ? 0 : this.wasm.exports.latency_samples();
+        this.collectOutputEnvelope(output, latency);
         if ((++this.quantum & 7) === 0) {
-            this.postDisplay();
+            this.postDisplay(latency);
         }
 
         this.loadElapsedMs += Math.max(0, nowMs() - startMs);
@@ -148,7 +186,7 @@ class PghiProcessor extends AudioWorkletProcessor {
         return true;
     }
 
-    postDisplay() {
+    postDisplay(latency) {
         const ex = this.wasm.exports;
         const mem = this.mem;
         const envPtr = ex.env_ptr();
@@ -166,12 +204,17 @@ class PghiProcessor extends AudioWorkletProcessor {
         this.port.postMessage({
             type: 'display',
             env: env,
+            outputEnv: this.outputEnv,
+            outputDelay: this.outputDelay,
+            latencySamples: latency,
+            latencyMs: latency < 0 ? -1 : latency * 1000 / sampleRate,
+            bypass: this.bypass,
             position: ex.position(),
             colIndex: ex.col_index(),
             totalColumns: ex.total_columns(),
             marks: marks,
             markCount: markCount,
-            displaySize: ex.display_size(),
+            columnSamples: this.columnSamples,
             columns: cols,
             hop: ex.hop(),
             window: this.windowType,
